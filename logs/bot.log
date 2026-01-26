@@ -1,0 +1,34 @@
+[I 260127 01:09:43 smartConnect:124] in pool
+--- PAPER TRADING MODE ACTIVE (Angel One Logic) ---
+
+📚 Initializing Learning Engine...
+📚 Not enough trades to analyze.
+📚 LEARNING ENGINE INSIGHTS
+   Trades Analyzed: 0
+
+   Signal Performance:
+
+   Optimal RSI Range: 30-40
+
+   Current Adjustments:
+   • RSI Oversold: 35
+   • SL: 5.0% | Target: 8.0%
+
+🧠 Using learned adjustments: RSI=35-70, SL=5.0%, Target=8.0%
+
+🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀
+ALGO TRADING BOT STARTED
+🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀
+
+📌 Configuration:
+   Symbols: GOLDBEES-EQ, SILVERBEES-EQ
+   Capital: ₹1000.0
+   Stop Loss: 5.0% | Target: 8.0%
+   Trailing SL: 3.0%
+   Max Daily Loss: 10.0%
+   Check Interval: 60s
+   Mode: PAPER TRADING
+
+⏳ Starting market monitoring...
+
+⏳ Market opens at 9:15. Sleeping for 5 minutes...

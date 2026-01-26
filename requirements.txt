@@ -1,0 +1,9 @@
+smartapi-python
+pyotp
+python-dotenv
+pandas
+yfinance
+requests
+flask
+scikit-learn
+numpy
