@@ -3,7 +3,7 @@ import json
 import csv
 import logging
 from datetime import datetime
-from config import Config
+from src.core.config import Config
 
 # Set up file logging
 def setup_logging():

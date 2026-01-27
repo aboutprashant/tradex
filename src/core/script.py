@@ -1,18 +1,24 @@
 import time
+import sys
+import os
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
-from config import Config
-from broker_client import BrokerClient
-from indicators import apply_all_indicators, MultiTimeframeAnalyzer
-from notifications import notifier
-from trade_logger import logger, app_logger
-from learning_engine import learning_engine
-from symbols import symbol_manager, SYMBOL_UNIVERSE
-from position_sizing import position_sizer
-from support_resistance import sr_detector
-from ml_model import ml_predictor
-from sentiment import sentiment_filter
+
+# Add src directory to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+from src.core.config import Config
+from src.brokers.broker_client import BrokerClient
+from src.indicators.indicators import apply_all_indicators, MultiTimeframeAnalyzer
+from src.utils.notifications import notifier
+from src.core.trade_logger import logger, app_logger
+from src.ml.learning_engine import learning_engine
+from src.strategies.symbols import symbol_manager, SYMBOL_UNIVERSE
+from src.strategies.position_sizing import position_sizer
+from src.indicators.support_resistance import sr_detector
+from src.ml.ml_model import ml_predictor
+from src.indicators.sentiment import sentiment_filter
 
 # ============================================
 # UTILITY FUNCTIONS
@@ -189,6 +195,15 @@ def get_optimized_signal(df, mtf_trend):
     elif Config.TRADING_VERSION == "V2":
         # V2 Rule 1: STRONG_BULLISH MTF with relaxed RSI (up to 80)
         if mtf_strong_bullish:
+            # IMPROVEMENT 1: Reversal Entry - Catch bottoms in downtrends when RSI is very oversold
+            # This fixes the "Downtrend (no buy)" issue when RSI < 30
+            if not already_uptrend and rsi < 30 and price_above_sma20:
+                # Very oversold in STRONG_BULLISH MTF - likely reversal point
+                if macd_bullish or volume_ok:  # MACD bullish OR high volume confirms reversal
+                    reasons = ["Reversal Entry ✓ (V2)", "STRONG_BULLISH MTF ✓", f"RSI Very Oversold ({rsi:.1f} < 30) ✓", 
+                              "Price Above SMA20 ✓", "Reversal Signal ✓"]
+                    return "STRONG_BUY", indicators, reasons
+            
             if sma_crossover_buy and rsi_oversold and macd_bullish and volume_ok:
                 reasons = ["SMA Crossover ✓", "RSI Oversold ✓", "MACD Bullish ✓", "Volume ✓", "MTF STRONG_BULLISH ✓ (V2)"]
                 return "STRONG_BUY", indicators, reasons
@@ -200,6 +215,18 @@ def get_optimized_signal(df, mtf_trend):
             if near_bb_lower and rsi_oversold and macd_bullish:
                 reasons = ["Near BB Lower ✓", "RSI Oversold ✓", "MACD Bullish ✓", "MTF STRONG_BULLISH ✓ (V2)"]
                 return "BUY", indicators, reasons
+            
+            # IMPROVEMENT 2: Relax MACD requirement for very oversold RSI
+            # When RSI < 30, MACD can lag - allow entry with volume confirmation
+            if rsi < 30 and price_above_sma20 and volume_ok:
+                if macd_bullish:
+                    reasons = ["Oversold Entry ✓ (V2)", "STRONG_BULLISH MTF ✓", f"RSI Very Oversold ({rsi:.1f} < 30) ✓", 
+                              "MACD Bullish ✓", "Volume ✓"]
+                    return "STRONG_BUY", indicators, reasons
+                elif not macd_bearish or abs(macd - macd_signal) < 0.1:  # MACD neutral or very close
+                    reasons = ["Oversold Entry ✓ (V2)", "STRONG_BULLISH MTF ✓", f"RSI Very Oversold ({rsi:.1f} < 30) ✓", 
+                              "MACD Neutral ✓", "Volume ✓"]
+                    return "BUY", indicators, reasons
             
             # Momentum Entry V2: STRONG_BULLISH uptrend + pullback (more aggressive)
             if already_uptrend and price_above_sma20 and rsi_pullback_strong:
@@ -217,12 +244,30 @@ def get_optimized_signal(df, mtf_trend):
         
         # V2 Rule 2: BULLISH MTF with relaxed RSI (up to 75)
         if mtf_bullish:
+            # IMPROVEMENT 3: Reversal Entry for BULLISH MTF
+            if not already_uptrend and rsi < 30 and price_above_sma20 and volume_ok:
+                # Very oversold in BULLISH MTF - reversal opportunity
+                if macd_bullish:
+                    reasons = ["Reversal Entry ✓ (V2)", "BULLISH MTF ✓", f"RSI Very Oversold ({rsi:.1f} < 30) ✓", 
+                              "Price Above SMA20 ✓", "MACD Bullish ✓", "Volume ✓"]
+                    return "STRONG_BUY", indicators, reasons
+                else:
+                    reasons = ["Reversal Entry ✓ (V2)", "BULLISH MTF ✓", f"RSI Very Oversold ({rsi:.1f} < 30) ✓", 
+                              "Price Above SMA20 ✓", "Volume ✓"]
+                    return "BUY", indicators, reasons
+            
             if sma_crossover_buy and rsi_oversold and macd_bullish and volume_ok:
                 reasons = ["SMA Crossover ✓", "RSI Oversold ✓", "MACD Bullish ✓", "Volume ✓", "MTF Bullish ✓"]
                 return "STRONG_BUY", indicators, reasons
             
             if sma_crossover_buy and rsi_ok_bullish and macd_bullish:
                 reasons = [f"SMA Crossover ✓", f"RSI OK ({rsi:.1f} < 75) ✓", "MACD Bullish ✓", "MTF Bullish ✓ (V2)"]
+                return "BUY", indicators, reasons
+            
+            # IMPROVEMENT 4: Relax MACD for very oversold RSI in BULLISH MTF
+            if rsi < 30 and price_above_sma20 and volume_ok:
+                reasons = ["Oversold Entry ✓ (V2)", "BULLISH MTF ✓", f"RSI Very Oversold ({rsi:.1f} < 30) ✓", 
+                          "Volume ✓", "Price Above SMA20 ✓"]
                 return "BUY", indicators, reasons
             
             # Momentum Entry V2: BULLISH uptrend + pullback
@@ -699,6 +744,14 @@ def main():
                     
                     # --- EXIT LOGIC ---
                     elif position:
+                        # Only process exit logic for positions entered by the bot
+                        if not position.get('bot_entered', True):
+                            # External position - only track, don't sell
+                            if current_price > position.get('highest_price', current_price):
+                                position['highest_price'] = current_price
+                            position['current_price'] = current_price
+                            continue
+                        
                         quantity = position['quantity']
                         buy_price = position['buy_price']
                         
@@ -714,16 +767,34 @@ def main():
                         effective_sl = max(fixed_sl, trailing_sl)
                         target = buy_price * (1 + Config.TARGET_PCT)
                         
+                        # IMPROVEMENT 5: ATR-based trailing stop (more dynamic)
+                        atr_value = indicators.get('ATR', 0)
+                        if atr_value > 0:
+                            atr_multiplier = 2.0  # Use 2x ATR for trailing stop
+                            atr_trailing_sl = highest_price - (atr_value * atr_multiplier)
+                            effective_sl = max(effective_sl, atr_trailing_sl)
+                        
+                        # IMPROVEMENT 6: Partial exit at 50% target
+                        partial_target = buy_price * (1 + Config.TARGET_PCT * 0.5)
+                        partial_exit_done = position.get('partial_exit_done', False)
+                        
                         exit_reason = None
+                        exit_quantity = quantity  # Default: exit full position
+                        
                         if current_price <= effective_sl:
                             exit_reason = "TRAILING SL" if trailing_sl > fixed_sl else "STOP LOSS"
                         elif current_price >= target:
                             exit_reason = "TARGET HIT"
+                        elif not partial_exit_done and current_price >= partial_target:
+                            # Partial exit at 50% target - take profits on half position
+                            exit_reason = "PARTIAL TARGET (50%)"
+                            exit_quantity = max(1, quantity // 2)  # Exit half, keep at least 1 unit
+                            position['partial_exit_done'] = True
                         elif signal == "SELL":
                             exit_reason = "TREND REVERSAL"
                         
                         if exit_reason:
-                            pnl = (current_price - buy_price) * quantity
+                            pnl = (current_price - buy_price) * exit_quantity
                             total_pnl += pnl
                             daily_pnl += pnl
                             monthly_pnl += pnl
@@ -734,31 +805,50 @@ def main():
                             print(f"🛑 {exit_reason}")
                             print(f"{'='*65}")
                             print(f"   Symbol: {symbol}")
-                            print(f"   Selling {quantity} units @ ₹{current_price:.2f}")
+                            print(f"   Selling {exit_quantity} units @ ₹{current_price:.2f}")
+                            if exit_quantity < quantity:
+                                print(f"   📊 Partial exit: {exit_quantity}/{quantity} units (keeping {quantity - exit_quantity} for full target)")
                             print(f"   {pnl_emoji} Trade PnL: ₹{pnl:.2f}")
                             print(f"   📊 Daily PnL: ₹{daily_pnl:.2f}")
                             print(f"   📈 Total PnL: ₹{total_pnl:.2f}")
                             
-                            broker.place_order(symbol, quantity, "SELL")
+                            order_result = broker.place_order(symbol, exit_quantity, "SELL")
                             
-                            # Log and notify
-                            logger.log_trade(symbol, "SELL", quantity, current_price,
-                                           "", exit_reason, pnl, indicators)
-                            logger.log_trade_decision(symbol, signal, "EXECUTED", 
-                                                     f"SELL {quantity} units @ ₹{current_price:.2f} | {exit_reason} | PnL: ₹{pnl:.2f}", 
-                                                     indicators)
-                            notifier.send_sell_alert(symbol, quantity, buy_price, current_price, 
-                                                   exit_reason, pnl)
-                            
-                            # Remove position
-                            del positions[symbol]
-                            logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
-                            
-                            # 🧠 LEARNING: Re-analyze trades after each completed trade
-                            print(f"\n🧠 Updating learning model...")
-                            learning_engine.analyze_trades()
-                            
-                            print(f"   ✅ Order placed successfully!")
+                            # Only proceed if order was successful (or in paper trading mode)
+                            if order_result or Config.PAPER_TRADING:
+                                # Log and notify
+                                logger.log_trade(symbol, "SELL", exit_quantity, current_price,
+                                               "", exit_reason, pnl, indicators)
+                                logger.log_trade_decision(symbol, signal, "EXECUTED", 
+                                                         f"SELL {exit_quantity} units @ ₹{current_price:.2f} | {exit_reason} | PnL: ₹{pnl:.2f}", 
+                                                         indicators)
+                                notifier.send_sell_alert(symbol, exit_quantity, buy_price, current_price, 
+                                                       exit_reason, pnl)
+                                
+                                # Update or remove position
+                                if exit_quantity < quantity:
+                                    # Partial exit - update position
+                                    position['quantity'] -= exit_quantity
+                                    # Adjust buy_price for remaining position (weighted average)
+                                    remaining_value = (quantity - exit_quantity) * buy_price
+                                    position['buy_price'] = remaining_value / (quantity - exit_quantity)
+                                    print(f"   📊 Remaining position: {position['quantity']} units @ ₹{position['buy_price']:.2f}")
+                                else:
+                                    # Full exit - remove position
+                                    del positions[symbol]
+                                
+                                logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
+                                
+                                # 🧠 LEARNING: Re-analyze trades after each completed trade
+                                if exit_quantity == quantity:  # Only update learning on full exits
+                                    print(f"\n🧠 Updating learning model...")
+                                    learning_engine.analyze_trades()
+                                
+                                print(f"   ✅ Order placed successfully!")
+                            else:
+                                print(f"   ⚠️ Order failed - position will remain in tracking")
+                                print(f"   💡 You may need to manually place the order for {symbol}")
+                                # Keep the position in tracking since order failed
                 
                 except Exception as e:
                     error_msg = f"Error processing {symbol}: {e}"
@@ -767,68 +857,98 @@ def main():
                     notifier.send_error_alert(error_msg)
             
             # Process positions for symbols not in trading list (external positions)
-            # These positions are tracked but may not have full analysis
+            # These positions are tracked for monitoring only - bot will NOT sell them
             tracked_symbols = set(Config.SYMBOLS)
             for symbol, position in list(positions.items()):
                 if symbol not in tracked_symbols:
                     try:
-                        # Try to fetch data for this symbol
-                        df = fetch_live_data(symbol)
-                        if not df.empty:
-                            df = apply_all_indicators(df)
-                            current_price = get_value(df.iloc[-1]["Close"])
-                            position['current_price'] = current_price
-                            
-                            # Update highest_price
-                            if current_price > position.get('highest_price', current_price):
-                                position['highest_price'] = current_price
-                            
-                            # Check exit conditions for external positions
-                            quantity = position['quantity']
-                            buy_price = position['buy_price']
-                            highest_price = position['highest_price']
-                            
-                            fixed_sl = buy_price * (1 - Config.SL_PCT)
-                            trailing_sl = highest_price * (1 - Config.TRAILING_SL_PCT)
-                            effective_sl = max(fixed_sl, trailing_sl)
-                            target = buy_price * (1 + Config.TARGET_PCT)
-                            
-                            exit_reason = None
-                            if current_price <= effective_sl:
-                                exit_reason = "TRAILING SL" if trailing_sl > fixed_sl else "STOP LOSS"
-                            elif current_price >= target:
-                                exit_reason = "TARGET HIT"
-                            
-                            if exit_reason:
-                                pnl = (current_price - buy_price) * quantity
-                                total_pnl += pnl
-                                daily_pnl += pnl
-                                
-                                pnl_emoji = "✅" if pnl >= 0 else "❌"
-                                position_type = "External" if not position.get('bot_entered', True) else "Bot"
-                                
-                                print(f"\n{'='*65}")
-                                print(f"🛑 {exit_reason} ({position_type} Position)")
-                                print(f"{'='*65}")
-                                print(f"   Symbol: {symbol}")
-                                print(f"   Selling {quantity} units @ ₹{current_price:.2f}")
-                                print(f"   {pnl_emoji} Trade PnL: ₹{pnl:.2f}")
-                                
-                                broker.place_order(symbol, quantity, "SELL")
-                                
-                                logger.log_trade(symbol, "SELL", quantity, current_price,
-                                               "", exit_reason, pnl, {})
-                                notifier.send_sell_alert(symbol, quantity, buy_price, current_price, 
-                                                       exit_reason, pnl)
-                                
-                                del positions[symbol]
-                                logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
+                        # Only track external positions - never sell them automatically
+                        if not position.get('bot_entered', True):
+                            # External position - only update price tracking, never sell
+                            try:
+                                df = fetch_live_data(symbol)
+                                if not df.empty:
+                                    df = apply_all_indicators(df)
+                                    current_price = get_value(df.iloc[-1]["Close"])
+                                    position['current_price'] = current_price
+                                    
+                                    # Update highest_price for tracking
+                                    if current_price > position.get('highest_price', current_price):
+                                        position['highest_price'] = current_price
+                                    
+                                    # Calculate PnL for display only
+                                    quantity = position['quantity']
+                                    buy_price = position['buy_price']
+                                    pnl = (current_price - buy_price) * quantity
+                                    pnl_pct = ((current_price - buy_price) / buy_price * 100) if buy_price > 0 else 0
+                                    
+                                    # Just log status, but don't sell
+                                    # Bot will only track external positions, never sell them
+                            except Exception as e:
+                                # Skip if we can't process this symbol
+                                pass
                         else:
-                            # No data available, just update price from broker sync
-                            if 'current_price' in position:
-                                current_price = position['current_price']
-                                if current_price > position.get('highest_price', current_price):
-                                    position['highest_price'] = current_price
+                            # Bot-entered position not in trading list - process normally
+                            # This shouldn't happen often, but handle it just in case
+                            try:
+                                df = fetch_live_data(symbol)
+                                if not df.empty:
+                                    df = apply_all_indicators(df)
+                                    current_price = get_value(df.iloc[-1]["Close"])
+                                    position['current_price'] = current_price
+                                    
+                                    # Update highest_price
+                                    if current_price > position.get('highest_price', current_price):
+                                        position['highest_price'] = current_price
+                                    
+                                    # Check exit conditions for bot-entered positions
+                                    quantity = position['quantity']
+                                    buy_price = position['buy_price']
+                                    highest_price = position['highest_price']
+                                    
+                                    fixed_sl = buy_price * (1 - Config.SL_PCT)
+                                    trailing_sl = highest_price * (1 - Config.TRAILING_SL_PCT)
+                                    effective_sl = max(fixed_sl, trailing_sl)
+                                    target = buy_price * (1 + Config.TARGET_PCT)
+                                    
+                                    exit_reason = None
+                                    if current_price <= effective_sl:
+                                        exit_reason = "TRAILING SL" if trailing_sl > fixed_sl else "STOP LOSS"
+                                    elif current_price >= target:
+                                        exit_reason = "TARGET HIT"
+                                    
+                                    if exit_reason:
+                                        pnl = (current_price - buy_price) * quantity
+                                        total_pnl += pnl
+                                        daily_pnl += pnl
+                                        
+                                        pnl_emoji = "✅" if pnl >= 0 else "❌"
+                                        
+                                        print(f"\n{'='*65}")
+                                        print(f"🛑 {exit_reason} (Bot Position)")
+                                        print(f"{'='*65}")
+                                        print(f"   Symbol: {symbol}")
+                                        print(f"   Selling {quantity} units @ ₹{current_price:.2f}")
+                                        print(f"   {pnl_emoji} Trade PnL: ₹{pnl:.2f}")
+                                        
+                                        order_result = broker.place_order(symbol, quantity, "SELL")
+                                        
+                                        # Only proceed if order was successful (or in paper trading mode)
+                                        if order_result or Config.PAPER_TRADING:
+                                            logger.log_trade(symbol, "SELL", quantity, current_price,
+                                                           "", exit_reason, pnl, {})
+                                            notifier.send_sell_alert(symbol, quantity, buy_price, current_price, 
+                                                                   exit_reason, pnl)
+                                            
+                                            del positions[symbol]
+                                            logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
+                                            print(f"   ✅ Order placed successfully!")
+                                        else:
+                                            print(f"   ⚠️ Order failed - position will remain in tracking")
+                                            print(f"   💡 You may need to manually place the order for {symbol}")
+                            except Exception as e:
+                                # Skip if we can't process this symbol
+                                pass
                     except Exception as e:
                         # Skip if we can't process this symbol (might not be tradeable via yfinance)
                         pass

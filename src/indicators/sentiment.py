@@ -4,7 +4,7 @@ Skips trading during major news events or negative sentiment.
 """
 import requests
 from datetime import datetime, date
-from config import Config
+from src.core.config import Config
 
 # Major market events calendar (manually maintained)
 # Format: "YYYY-MM-DD": "Event Description"

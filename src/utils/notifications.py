@@ -1,6 +1,6 @@
 import requests
-from config import Config
 from datetime import datetime
+from src.core.config import Config
 
 class TelegramNotifier:
     """Sends trading alerts via Telegram."""

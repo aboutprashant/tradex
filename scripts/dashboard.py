@@ -2,12 +2,15 @@
 Web Dashboard for Trading Bot Monitoring
 Real-time view of positions, trades, and performance.
 """
+import sys
 import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import csv
 import json
 from datetime import datetime
 from flask import Flask, render_template_string, jsonify
-from config import Config
+from src.core.config import Config
 
 app = Flask(__name__)
 
@@ -348,7 +351,7 @@ def get_bot_status():
     """Check if bot is running."""
     import subprocess
     try:
-        result = subprocess.run(['pgrep', '-f', 'python.*script.py'], capture_output=True)
+        result = subprocess.run(['pgrep', '-f', 'python.*src/core/script.py'], capture_output=True)
         running = result.returncode == 0
     except:
         running = False

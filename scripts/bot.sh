@@ -10,10 +10,10 @@
 #   ./bot.sh logs    - View live logs
 # ============================================
 
-BOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_PYTHON="$BOT_DIR/venv/bin/python"
-SCRIPT="$BOT_DIR/script.py"
-PID_FILE="$BOT_DIR/bot.pid"
+SCRIPT="$BOT_DIR/src/core/script.py"
+PID_FILE="$BOT_DIR/logs/bot.pid"
 LOG_FILE="$BOT_DIR/logs/bot.log"
 
 # Ensure log directory exists
@@ -73,7 +73,7 @@ stop_bot() {
         fi
     else
         # Try to find and kill any running instance
-        PIDS=$(pgrep -f "python.*script.py")
+        PIDS=$(pgrep -f "python.*src/core/script.py")
         if [ -n "$PIDS" ]; then
             echo "🛑 Stopping Trading Bot..."
             kill $PIDS
@@ -99,7 +99,7 @@ status_bot() {
             return 1
         fi
     else
-        PIDS=$(pgrep -f "python.*script.py")
+        PIDS=$(pgrep -f "python.*src/core/script.py")
         if [ -n "$PIDS" ]; then
             echo "✅ Bot is running (PID: $PIDS)"
             return 0

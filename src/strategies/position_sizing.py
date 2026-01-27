@@ -4,7 +4,7 @@ Calculates optimal position size based on historical win rate and payoff ratio.
 """
 import os
 import csv
-from config import Config
+from src.core.config import Config
 
 class PositionSizer:
     """

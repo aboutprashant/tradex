@@ -16,9 +16,9 @@ if [ -d "venv" ]; then
 fi
 
 # Start the bot
-nohup python script.py > logs/bot.log 2>&1 &
+nohup python src/core/script.py > logs/bot.log 2>&1 &
 
 # Optional: Start dashboard
-# nohup python dashboard.py > logs/dashboard.log 2>&1 &
+# nohup python scripts/dashboard.py > logs/dashboard.log 2>&1 &
 
 echo "Trading bot started at $(date)" >> logs/startup.log

@@ -2,7 +2,7 @@ import pyotp
 import requests
 import pandas as pd
 from SmartApi import SmartConnect
-from config import Config
+from src.core.config import Config
 
 class BrokerClient:
     def __init__(self):
@@ -244,6 +244,53 @@ class BrokerClient:
                             error_msg = response.get('message', '')
                             error_code = response.get('errorCode', '')
                             
+                            # Check for cautionary listing error (AB4036)
+                            if 'cautionary' in error_msg.lower() or error_code == 'AB4036':
+                                print(f"⚠️ {symbol} is on cautionary listing - cannot place MARKET orders")
+                                print(f"   Error: {error_msg}")
+                                print(f"   💡 Attempting LIMIT order as fallback...")
+                                
+                                # Try LIMIT order with current price (if available)
+                                # For SELL orders, try a slightly lower price to ensure execution
+                                # For BUY orders, try a slightly higher price
+                                if price is None:
+                                    # Try to get current market price
+                                    try:
+                                        import yfinance as yf
+                                        yf_symbol = symbol.replace('-EQ', '.NS')
+                                        ticker = yf.Ticker(yf_symbol)
+                                        info = ticker.info
+                                        current_market_price = info.get('currentPrice') or info.get('regularMarketPrice')
+                                        
+                                        if current_market_price:
+                                            # For SELL: use slightly lower price (0.5% below)
+                                            # For BUY: use slightly higher price (0.5% above)
+                                            if side == 'SELL':
+                                                limit_price = current_market_price * 0.995
+                                            else:
+                                                limit_price = current_market_price * 1.005
+                                            
+                                            print(f"   📊 Current market price: ₹{current_market_price:.2f}")
+                                            print(f"   💰 Trying LIMIT order at ₹{limit_price:.2f}")
+                                            
+                                            order_params['ordertype'] = 'LIMIT'
+                                            order_params['price'] = str(round(limit_price, 2))
+                                            time.sleep(1)
+                                            order_id = self.obj.placeOrder(order_params)
+                                            if order_id:
+                                                print(f"✅ LIMIT order placed successfully. ID: {order_id}")
+                                                return order_id
+                                            else:
+                                                print(f"❌ LIMIT order also failed. Stock may be completely restricted.")
+                                                print(f"   ⚠️ Manual intervention required for {symbol}")
+                                                return None
+                                    except Exception as limit_error:
+                                        print(f"   ❌ Could not fetch market price for LIMIT order: {limit_error}")
+                                
+                                print(f"❌ Cannot place order for {symbol} - stock is on cautionary listing")
+                                print(f"   💡 You may need to place this order manually through broker platform")
+                                return None
+                            
                             # Check for symbol mismatch error (AB1019)
                             if 'mismatch' in error_msg.lower() or error_code == 'AB1019':
                                 print("🔄 Symbol format mismatch detected, trying alternative format...")
@@ -297,6 +344,15 @@ class BrokerClient:
                 
         except Exception as e:
             error_str = str(e)
+            
+            # Check for cautionary listing error in exception
+            if 'cautionary' in error_str.lower() or 'AB4036' in error_str:
+                print(f"⚠️ {symbol} is on cautionary listing - cannot place MARKET orders")
+                print(f"   Error: {error_str}")
+                print(f"   💡 You may need to place this order manually through broker platform")
+                print(f"   💡 Or try placing a LIMIT order manually")
+                return None
+            
             # Final check for token errors in exception message
             if 'Invalid Token' in error_str or 'AG8001' in error_str:
                 print("🔄 Token expired (final attempt), refreshing...")
@@ -462,3 +518,17 @@ class BrokerClient:
         except Exception as e:
             print(f"❌ Failed to get order book: {e}")
             return []
+    
+    def check_tradeable(self, symbol):
+        """
+        Check if a stock is tradeable (not on cautionary listing).
+        Returns (is_tradeable, reason) tuple.
+        """
+        if Config.PAPER_TRADING:
+            return True, "Paper trading mode"
+        
+        # Try to place a test order (with very small quantity) to check if it's tradeable
+        # Actually, we can't do this without risking an order. Instead, we'll just document
+        # that stocks on cautionary listing will fail with AB4036 error.
+        # This method is a placeholder for future enhancement.
+        return True, "Check will be done during actual order placement"

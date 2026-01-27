@@ -10,7 +10,7 @@ case "$1" in
     start)
         echo "🚀 Starting Trading Bot..."
         termux-wake-lock
-        nohup python script.py > logs/bot.log 2>&1 &
+        nohup python src/core/script.py > logs/bot.log 2>&1 &
         echo $! > logs/bot.pid
         echo "✅ Bot started! PID: $(cat logs/bot.pid)"
         ;;

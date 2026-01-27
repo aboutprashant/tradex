@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from config import Config
+from src.core.config import Config
 
 def calculate_rsi(prices, period=14):
     """

@@ -7,7 +7,7 @@ import csv
 import json
 import pickle
 from datetime import datetime
-from config import Config
+from src.core.config import Config
 
 # Try to import sklearn, fall back to simple model if not available
 try:

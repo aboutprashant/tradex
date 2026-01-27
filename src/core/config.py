@@ -1,7 +1,14 @@
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from project root or config folder
+project_root = Path(__file__).parent.parent.parent
+env_path = project_root / '.env'
+if not env_path.exists():
+    env_path = project_root / 'config' / '.env'
+load_dotenv(env_path)
 
 class Config:
     # ============================================
@@ -92,7 +99,7 @@ class Config:
     # ============================================
     # LOGGING
     # ============================================
-    LOG_DIR = os.getenv("LOG_DIR", "logs")
+    LOG_DIR = os.getenv("LOG_DIR", str(project_root / "logs"))
     TRADE_LOG_FILE = "trades.csv"
     POSITION_LOG_FILE = "positions.json"
     

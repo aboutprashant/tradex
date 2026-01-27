@@ -1,7 +1,11 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import yfinance as yf
 import pandas as pd
-from config import Config
-from indicators import apply_all_indicators, MultiTimeframeAnalyzer
+from src.core.config import Config
+from src.indicators.indicators import apply_all_indicators, MultiTimeframeAnalyzer
 
 def get_value(series_or_scalar):
     """Helper to extract a single float value."""

@@ -9460,3 +9460,175 @@ CHECK #76 | SILVERIETF-EQ | HOLD | Price: ₹328.72 | RSI: 79.1 | MACD: 1.451 | 
 ⏳ Next check in 60s
 
 ⏳ Next check in 60s... (Check #76)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 CHECK CYCLE #77 | 2026-01-27 12:54:42
+MARKET STATUS | OPEN | Market Open
+
+=================================================================
+⏰ 2026-01-27 12:54:43 | Check #77
+=================================================================
+📊 GOLDBEES-EQ | Price: ₹131.24
+   SMA(5): ₹131.21 | SMA(20): ₹131.12
+   RSI: 64.5 | MACD: 0.223
+   ATR: ₹0.15 | MTF: STRONG_BULLISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: 2 units @ ₹130.88
+   🟢 Unrealized PnL: ₹0.72 (+0.28%)
+   🛡️ SL: ₹124.34 | 🎯 Target: ₹141.35
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: Uptrend (waiting for entry), MACD Bearish
+=================================================================
+CHECK #77 | GOLDBEES-EQ | HOLD | Price: ₹131.24 | RSI: 64.5 | MACD: 0.223 | SMA5: ₹131.21 | SMA20: ₹131.12 | MTF: STRONG_BULLISH | Reasons: Uptrend (waiting for entry), MACD Bearish | Position: 2 @ ₹130.88 | PnL: ₹0.72 (+0.28%)
+
+=================================================================
+⏰ 2026-01-27 12:54:44 | Check #77
+=================================================================
+📊 SILVERBEES-EQ | Price: ₹313.47
+   SMA(5): ₹312.99 | SMA(20): ₹312.20
+   RSI: 71.1 | MACD: 0.981
+   ATR: ₹0.77 | MTF: STRONG_BULLISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: 1 units @ ₹312.82
+   🟢 Unrealized PnL: ₹0.65 (+0.21%)
+   🛡️ SL: ₹297.18 | 🎯 Target: ₹337.85
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: Uptrend (waiting for entry), MACD Bearish
+=================================================================
+CHECK #77 | SILVERBEES-EQ | HOLD | Price: ₹313.47 | RSI: 71.1 | MACD: 0.981 | SMA5: ₹312.99 | SMA20: ₹312.20 | MTF: STRONG_BULLISH | Reasons: Uptrend (waiting for entry), MACD Bearish | Position: 1 @ ₹312.82 | PnL: ₹0.65 (+0.21%)
+
+=================================================================
+⏰ 2026-01-27 12:54:46 | Check #77
+=================================================================
+📊 NIFTYBEES-EQ | Price: ₹284.12
+   SMA(5): ₹284.09 | SMA(20): ₹284.21
+   RSI: 38.4 | MACD: 0.014
+   ATR: ₹0.35 | MTF: BEARISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: None (waiting for entry)
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: Bearish: MTF Bearish ✓, MACD Bearish ✓, No position (cannot exit)
+=================================================================
+CHECK #77 | NIFTYBEES-EQ | HOLD | Price: ₹284.12 | RSI: 38.4 | MACD: 0.014 | SMA5: ₹284.09 | SMA20: ₹284.21 | MTF: BEARISH | Reasons: Bearish: MTF Bearish ✓, MACD Bearish ✓, No position (cannot exit)
+
+=================================================================
+⏰ 2026-01-27 12:54:47 | Check #77
+=================================================================
+📊 BANKBEES-EQ | Price: ₹605.28
+   SMA(5): ₹604.93 | SMA(20): ₹605.27
+   RSI: 38.8 | MACD: 0.131
+   ATR: ₹1.02 | MTF: NEUTRAL
+─────────────────────────────────────────────────────────────────
+📍 POSITION: None (waiting for entry)
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: MTF: NEUTRAL (V2: waiting for oversold RSI < 35), Downtrend (no buy), MACD Bearish
+=================================================================
+CHECK #77 | BANKBEES-EQ | HOLD | Price: ₹605.28 | RSI: 38.8 | MACD: 0.131 | SMA5: ₹604.93 | SMA20: ₹605.27 | MTF: NEUTRAL | Reasons: MTF: NEUTRAL (V2: waiting for oversold RSI < 35), Downtrend (no buy), MACD Bearish
+
+=================================================================
+⏰ 2026-01-27 12:54:48 | Check #77
+=================================================================
+📊 SILVERIETF-EQ | Price: ₹328.61
+   SMA(5): ₹327.85 | SMA(20): ₹326.32
+   RSI: 78.7 | MACD: 1.442
+   ATR: ₹0.86 | MTF: STRONG_BULLISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: None (waiting for entry)
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: RSI Overbought (78.7 > 75), Uptrend (waiting for entry), MACD Bearish
+=================================================================
+CHECK #77 | SILVERIETF-EQ | HOLD | Price: ₹328.61 | RSI: 78.7 | MACD: 1.442 | SMA5: ₹327.85 | SMA20: ₹326.32 | MTF: STRONG_BULLISH | Reasons: RSI Overbought (78.7 > 75), Uptrend (waiting for entry), MACD Bearish
+✅ CHECK #77 COMPLETE | Symbols analyzed: 5 | Open positions: 2 | Daily PnL: ₹0.00 | Total PnL: ₹0.00
+⏳ Next check in 60s
+
+⏳ Next check in 60s... (Check #77)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 CHECK CYCLE #78 | 2026-01-27 12:55:49
+MARKET STATUS | OPEN | Market Open
+
+=================================================================
+⏰ 2026-01-27 12:55:50 | Check #78
+=================================================================
+📊 GOLDBEES-EQ | Price: ₹131.22
+   SMA(5): ₹131.22 | SMA(20): ₹131.13
+   RSI: 63.0 | MACD: 0.209
+   ATR: ₹0.15 | MTF: STRONG_BULLISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: 2 units @ ₹130.88
+   🟢 Unrealized PnL: ₹0.68 (+0.26%)
+   🛡️ SL: ₹124.34 | 🎯 Target: ₹141.35
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: Uptrend (waiting for entry), MACD Bearish
+=================================================================
+CHECK #78 | GOLDBEES-EQ | HOLD | Price: ₹131.22 | RSI: 63.0 | MACD: 0.209 | SMA5: ₹131.22 | SMA20: ₹131.13 | MTF: STRONG_BULLISH | Reasons: Uptrend (waiting for entry), MACD Bearish | Position: 2 @ ₹130.88 | PnL: ₹0.68 (+0.26%)
+
+=================================================================
+⏰ 2026-01-27 12:55:51 | Check #78
+=================================================================
+📊 SILVERBEES-EQ | Price: ₹313.74
+   SMA(5): ₹313.18 | SMA(20): ₹312.31
+   RSI: 73.0 | MACD: 1.001
+   ATR: ₹0.72 | MTF: STRONG_BULLISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: 1 units @ ₹312.82
+   🟢 Unrealized PnL: ₹0.92 (+0.29%)
+   🛡️ SL: ₹297.18 | 🎯 Target: ₹337.85
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: Uptrend (waiting for entry), MACD Bearish
+=================================================================
+CHECK #78 | SILVERBEES-EQ | HOLD | Price: ₹313.74 | RSI: 73.0 | MACD: 1.001 | SMA5: ₹313.18 | SMA20: ₹312.31 | MTF: STRONG_BULLISH | Reasons: Uptrend (waiting for entry), MACD Bearish | Position: 1 @ ₹312.82 | PnL: ₹0.92 (+0.29%)
+
+=================================================================
+⏰ 2026-01-27 12:55:52 | Check #78
+=================================================================
+📊 NIFTYBEES-EQ | Price: ₹284.20
+   SMA(5): ₹284.11 | SMA(20): ₹284.24
+   RSI: 46.3 | MACD: 0.019
+   ATR: ₹0.31 | MTF: BEARISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: None (waiting for entry)
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: Bearish: MTF Bearish ✓, MACD Bearish ✓, No position (cannot exit)
+=================================================================
+CHECK #78 | NIFTYBEES-EQ | HOLD | Price: ₹284.20 | RSI: 46.3 | MACD: 0.019 | SMA5: ₹284.11 | SMA20: ₹284.24 | MTF: BEARISH | Reasons: Bearish: MTF Bearish ✓, MACD Bearish ✓, No position (cannot exit)
+
+=================================================================
+⏰ 2026-01-27 12:55:54 | Check #78
+=================================================================
+📊 BANKBEES-EQ | Price: ₹605.65
+   SMA(5): ₹605.13 | SMA(20): ₹605.32
+   RSI: 47.9 | MACD: 0.183
+   ATR: ₹0.95 | MTF: NEUTRAL
+─────────────────────────────────────────────────────────────────
+📍 POSITION: None (waiting for entry)
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: MTF: NEUTRAL (V2: waiting for oversold RSI < 35), Downtrend (no buy), MACD Bearish
+=================================================================
+CHECK #78 | BANKBEES-EQ | HOLD | Price: ₹605.65 | RSI: 47.9 | MACD: 0.183 | SMA5: ₹605.13 | SMA20: ₹605.32 | MTF: NEUTRAL | Reasons: MTF: NEUTRAL (V2: waiting for oversold RSI < 35), Downtrend (no buy), MACD Bearish
+
+=================================================================
+⏰ 2026-01-27 12:55:55 | Check #78
+=================================================================
+📊 SILVERIETF-EQ | Price: ₹328.76
+   SMA(5): ₹328.13 | SMA(20): ₹326.53
+   RSI: 79.0 | MACD: 1.461
+   ATR: ₹0.81 | MTF: STRONG_BULLISH
+─────────────────────────────────────────────────────────────────
+📍 POSITION: None (waiting for entry)
+─────────────────────────────────────────────────────────────────
+📡 SIGNAL: ⏸️ HOLD
+   Reasons: RSI Overbought (79.0 > 75), Uptrend (waiting for entry)
+=================================================================
+CHECK #78 | SILVERIETF-EQ | HOLD | Price: ₹328.76 | RSI: 79.0 | MACD: 1.461 | SMA5: ₹328.13 | SMA20: ₹326.53 | MTF: STRONG_BULLISH | Reasons: RSI Overbought (79.0 > 75), Uptrend (waiting for entry)
+✅ CHECK #78 COMPLETE | Symbols analyzed: 5 | Open positions: 2 | Daily PnL: ₹0.00 | Total PnL: ₹0.00
+⏳ Next check in 60s
+
+⏳ Next check in 60s... (Check #78)

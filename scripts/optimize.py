@@ -1,7 +1,11 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import yfinance as yf
 import pandas as pd
 import itertools
-from indicators import apply_all_indicators
+from src.indicators.indicators import apply_all_indicators
 
 def get_value(series_or_scalar):
     if isinstance(series_or_scalar, pd.Series):

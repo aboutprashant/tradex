@@ -2,7 +2,7 @@ import os
 import csv
 import json
 from datetime import datetime, timedelta
-from config import Config
+from src.core.config import Config
 
 class LearningEngine:
     """

@@ -4,8 +4,9 @@
 # Usage: ./dashboard.sh [start|stop|status]
 # ============================================
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 VENV_PYTHON="$SCRIPT_DIR/venv/bin/python"
+DASHBOARD_SCRIPT="$SCRIPT_DIR/scripts/dashboard.py"
 PID_FILE="$SCRIPT_DIR/logs/dashboard.pid"
 LOG_FILE="$SCRIPT_DIR/logs/dashboard.log"
 
@@ -23,7 +24,7 @@ start() {
     cd "$SCRIPT_DIR"
     source "$SCRIPT_DIR/venv/bin/activate"
     
-    nohup "$VENV_PYTHON" dashboard.py > "$LOG_FILE" 2>&1 &
+    nohup "$VENV_PYTHON" "$DASHBOARD_SCRIPT" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     
     sleep 2

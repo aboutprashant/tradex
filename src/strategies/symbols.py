@@ -5,7 +5,7 @@ Dynamically selects the best performing symbols to trade.
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
-from config import Config
+from src.core.config import Config
 
 # All available symbols for trading
 SYMBOL_UNIVERSE = {
