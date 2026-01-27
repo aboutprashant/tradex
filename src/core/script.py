@@ -4,6 +4,7 @@ import os
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
+import pytz
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -32,28 +33,35 @@ def get_value(series_or_scalar):
 
 
 def is_market_open():
-    """Check if the market is currently open (9:15 AM - 3:30 PM IST, Mon-Fri)."""
-    now = datetime.now()
+    """Check if the market is currently open (9:15 AM - 3:30 PM IST, Mon-Fri).
+    Uses IST timezone regardless of server location.
+    """
+    # Get current time in IST (Indian Standard Time, UTC+5:30)
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
     
-    # Check if it's a weekday
-    if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
+    # Check if it's a weekday (Monday=0, Sunday=6)
+    if now_ist.weekday() >= 5:  # Saturday = 5, Sunday = 6
         return False, "Weekend"
     
-    market_open = now.replace(hour=Config.MARKET_OPEN_HOUR, minute=Config.MARKET_OPEN_MINUTE, second=0)
-    market_close = now.replace(hour=Config.MARKET_CLOSE_HOUR, minute=Config.MARKET_CLOSE_MINUTE, second=0)
+    # Create market open/close times in IST
+    market_open = now_ist.replace(hour=Config.MARKET_OPEN_HOUR, minute=Config.MARKET_OPEN_MINUTE, second=0, microsecond=0)
+    market_close = now_ist.replace(hour=Config.MARKET_CLOSE_HOUR, minute=Config.MARKET_CLOSE_MINUTE, second=0, microsecond=0)
     
-    if now < market_open:
-        return False, f"Market opens at {Config.MARKET_OPEN_HOUR}:{Config.MARKET_OPEN_MINUTE:02d}"
-    if now > market_close:
-        return False, f"Market closed at {Config.MARKET_CLOSE_HOUR}:{Config.MARKET_CLOSE_MINUTE:02d}"
+    if now_ist < market_open:
+        return False, f"Market opens at {Config.MARKET_OPEN_HOUR}:{Config.MARKET_OPEN_MINUTE:02d} IST"
+    if now_ist > market_close:
+        return False, f"Market closed at {Config.MARKET_CLOSE_HOUR}:{Config.MARKET_CLOSE_MINUTE:02d} IST"
     
     return True, "Market Open"
 
 
 def is_high_liquidity_window():
-    """Check if we're in a high liquidity trading window."""
-    now = datetime.now()
-    current_minutes = now.hour * 60 + now.minute
+    """Check if we're in a high liquidity trading window (uses IST)."""
+    # Get current time in IST
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    current_minutes = now_ist.hour * 60 + now_ist.minute
     
     for start_h, start_m, end_h, end_m in Config.HIGH_LIQUIDITY_WINDOWS:
         start_minutes = start_h * 60 + start_m
@@ -348,7 +356,8 @@ def get_optimized_signal(df, mtf_trend):
 
 def print_status(symbol, signal, indicators, reasons, position, current_price, check_count):
     """Print a formatted status update."""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S IST")
     
     print(f"\n{'='*65}")
     print(f"⏰ {now} | Check #{check_count}")
@@ -483,14 +492,17 @@ def main():
     while True:
         try:
             check_count += 1
-            now = datetime.now()
+            # Get current time in IST for all operations
+            ist = pytz.timezone('Asia/Kolkata')
+            now_ist = datetime.now(ist)
+            now_date = now_ist.date()
             
-            # Log check cycle start
+            # Log check cycle start (show IST time)
             app_logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            app_logger.info(f"🔄 CHECK CYCLE #{check_count} | {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            app_logger.info(f"🔄 CHECK CYCLE #{check_count} | {now_ist.strftime('%Y-%m-%d %H:%M:%S IST')}")
             
             # Periodically sync positions from broker (every 5 minutes)
-            if last_position_sync is None or (now - last_position_sync).total_seconds() >= POSITION_SYNC_INTERVAL:
+            if last_position_sync is None or (now_ist - last_position_sync).total_seconds() >= POSITION_SYNC_INTERVAL:
                 try:
                     broker_positions = broker.sync_all_positions()
                     for symbol, broker_pos in broker_positions.items():
@@ -525,25 +537,25 @@ def main():
                         print(f"   🗑️ External position closed: {symbol}")
                         del positions[symbol]
                     
-                    last_position_sync = now
+                    last_position_sync = now_ist
                     if broker_positions:
                         logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
                 except Exception as e:
                     app_logger.warning(f"Failed to sync positions: {e}")
             
-            # Check if market is open
+            # Check if market is open (uses IST internally)
             market_open, market_status = is_market_open()
             logger.log_market_status("CLOSED" if not market_open else "OPEN", market_status)
             
             if not market_open:
                 # Send market closed notification (only once per session)
-                if last_market_closed_alert != now.date():
+                if last_market_closed_alert != now_date:
                     notifier.send_market_closed_alert(market_status)
-                    last_market_closed_alert = now.date()
+                    last_market_closed_alert = now_date
                     market_was_open = False
                 
                 # Send overnight position alert at market close
-                if positions and last_daily_summary != now.date():
+                if positions and last_daily_summary != now_date:
                     overnight_positions = [
                         {**pos, 'symbol': sym} 
                         for sym, pos in positions.items()
@@ -558,10 +570,12 @@ def main():
                         total_pnl,
                         len(positions)
                     )
-                    last_daily_summary = now.date()
+                    last_daily_summary = now_date
                     daily_pnl = 0  # Reset daily PnL
                 
-                print(f"\n⏳ {market_status}. Sleeping for 5 minutes...")
+                # Show IST time in message
+                ist_time_str = now_ist.strftime("%H:%M:%S IST")
+                print(f"\n⏳ {market_status} ({ist_time_str}). Sleeping for 5 minutes...")
                 time.sleep(300)
                 continue
             
@@ -672,7 +686,8 @@ def main():
                         
                         # 🧠 LEARNING: Check if we should take this trade based on past performance
                         rsi = indicators.get('RSI', 50)
-                        current_hour = datetime.now().hour
+                        ist = pytz.timezone('Asia/Kolkata')
+                        current_hour = datetime.now(ist).hour  # Use IST hour for learning engine
                         should_trade, learn_confidence, learn_reason = learning_engine.should_take_trade(
                             signal, rsi, current_hour
                         )
@@ -719,11 +734,12 @@ def main():
                             print(f"   🧠 Confidence: {combined_confidence:.2f}")
                             
                             if broker.place_order(symbol, quantity, "BUY"):
+                                ist = pytz.timezone('Asia/Kolkata')
                                 positions[symbol] = {
                                     'quantity': quantity,
                                     'buy_price': current_price,
                                     'highest_price': current_price,
-                                    'entry_time': datetime.now().isoformat(),
+                                    'entry_time': datetime.now(ist).isoformat(),  # Store IST time
                                     'signal_type': signal,
                                     'confidence': combined_confidence,
                                     'bot_entered': True,  # Mark as bot-entered
