@@ -5,6 +5,10 @@
 
 # Broker API
 smartapi-python==1.5.5
+logzero==1.7.0  # Required by smartapi-python (transitive dependency)
+websocket==0.2.1  # Required by smartapi-python for WebSocket connections
+gevent==23.9.1  # Required by websocket (Python 3.9 compatible)
+greenlet==3.0.3  # Required by websocket (Python 3.9 compatible)
 
 # Authentication
 pyotp==2.9.0
