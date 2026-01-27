@@ -1,7 +1,6 @@
-# Trading Bot Dependencies
-# Python 3.9+ compatible versions (pinned for production stability)
-# Only direct dependencies - pip will resolve transitive dependencies automatically
-# Last verified: 2026-01-27
+# Trading Bot Dependencies - Python 3.9 Compatible
+# Pinned versions tested for Python 3.9 compatibility
+# Use this for production servers with Python 3.9
 
 # Broker API
 smartapi-python==1.5.5
@@ -13,7 +12,6 @@ pyotp==2.9.0
 python-dotenv==1.0.0
 
 # Data Processing (Python 3.9 compatible)
-# pandas 3.0.0+ requires Python 3.10+, so using pandas 2.x for Python 3.9
 pandas==2.2.0
 numpy==1.26.4
 
