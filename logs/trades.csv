@@ -1,1 +1,3 @@
 timestamp,symbol,action,quantity,price,signal_type,reason,pnl,rsi,macd,sma_5,sma_20,is_paper
+2026-01-27T11:29:46.826977,GOLDBEES-EQ,BUY,2,130.88,BUY,,,49.8,0.378,130.81,130.76,LIVE
+2026-01-27T12:40:05.463635,SILVERBEES-EQ,BUY,1,312.82,BUY,,,47.7,0.985,312.77,311.95,LIVE

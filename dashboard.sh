@@ -14,7 +14,7 @@ start() {
         PID=$(cat "$PID_FILE")
         if ps -p $PID > /dev/null 2>&1; then
             echo "⚠️ Dashboard already running (PID: $PID)"
-            echo "   Visit: http://localhost:5000"
+            echo "   Visit: http://localhost:5001"
             return
         fi
     fi
@@ -28,7 +28,7 @@ start() {
     
     sleep 2
     echo "✅ Dashboard started! PID: $(cat $PID_FILE)"
-    echo "🌐 Visit: http://localhost:5000"
+    echo "🌐 Visit: http://localhost:5001"
 }
 
 stop() {
@@ -53,7 +53,7 @@ status() {
         PID=$(cat "$PID_FILE")
         if ps -p $PID > /dev/null 2>&1; then
             echo "✅ Dashboard is running (PID: $PID)"
-            echo "🌐 URL: http://localhost:5000"
+            echo "🌐 URL: http://localhost:5001"
         else
             echo "⚠️ Dashboard is not running (stale PID file)"
         fi

@@ -536,8 +536,12 @@ def api_trades():
     return jsonify(get_trades())
 
 
-def run_dashboard(host='0.0.0.0', port=5000, debug=False):
+def run_dashboard(host=None, port=None, debug=False):
     """Run the dashboard server."""
+    # Use config values if available, otherwise defaults
+    host = host or Config.DASHBOARD_HOST
+    port = port or Config.DASHBOARD_PORT
+    
     print(f"🌐 Starting dashboard at http://localhost:{port}")
     app.run(host=host, port=port, debug=debug)
 

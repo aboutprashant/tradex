@@ -1,8 +1,48 @@
 import os
 import json
 import csv
+import logging
 from datetime import datetime
 from config import Config
+
+# Set up file logging
+def setup_logging():
+    """Configure logging to file and console."""
+    log_dir = Config.LOG_DIR
+    today = datetime.now().strftime('%Y-%m-%d')
+    daily_log_dir = os.path.join(log_dir, today)
+    
+    if not os.path.exists(daily_log_dir):
+        os.makedirs(daily_log_dir)
+    
+    log_file = os.path.join(daily_log_dir, 'app.log')
+    
+    # Create logger
+    logger = logging.getLogger('tradex')
+    logger.setLevel(logging.DEBUG)
+    
+    # Clear existing handlers
+    logger.handlers = []
+    
+    # File handler - logs everything
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+    file_handler.setFormatter(file_formatter)
+    
+    # Console handler - only INFO and above
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# Initialize the app logger
+app_logger = setup_logging()
 
 class TradeLogger:
     """Logs all trades and positions to files for record keeping."""
@@ -130,6 +170,49 @@ class TradeLogger:
             'wins': wins,
             'losses': losses
         }
+    
+    def log_check_cycle(self, check_count, symbol, signal, price, indicators, reasons, position=None):
+        """Log every check cycle for analysis."""
+        indicators = indicators or {}
+        reasons_str = ', '.join(reasons) if reasons else 'No reasons'
+        
+        # Build position info
+        position_info = ""
+        if position:
+            pnl = (price - position['buy_price']) * position['quantity']
+            pnl_pct = ((price - position['buy_price']) / position['buy_price']) * 100
+            position_info = f" | Position: {position['quantity']} @ ₹{position['buy_price']:.2f} | PnL: ₹{pnl:.2f} ({pnl_pct:+.2f}%)"
+        
+        log_msg = (
+            f"CHECK #{check_count} | {symbol} | {signal} | Price: ₹{price:.2f} | "
+            f"RSI: {indicators.get('RSI', 0):.1f} | MACD: {indicators.get('MACD', 0):.3f} | "
+            f"SMA5: ₹{indicators.get('SMA_5', 0):.2f} | SMA20: ₹{indicators.get('SMA_20', 0):.2f} | "
+            f"MTF: {indicators.get('MTF_Trend', 'N/A')} | Reasons: {reasons_str}{position_info}"
+        )
+        
+        app_logger.info(log_msg)
+    
+    def log_trade_decision(self, symbol, signal, decision, reason, indicators=None, confidence=None):
+        """Log trade decisions (why we took or skipped a trade)."""
+        indicators = indicators or {}
+        conf_str = f" | Confidence: {confidence:.2f}" if confidence else ""
+        
+        log_msg = (
+            f"TRADE DECISION | {symbol} | Signal: {signal} | Decision: {decision} | "
+            f"Reason: {reason} | RSI: {indicators.get('RSI', 0):.1f}{conf_str}"
+        )
+        
+        app_logger.info(log_msg)
+    
+    def log_error(self, error_msg, context=""):
+        """Log errors with context."""
+        log_msg = f"ERROR | {context} | {error_msg}" if context else f"ERROR | {error_msg}"
+        app_logger.error(log_msg)
+    
+    def log_market_status(self, status, reason=""):
+        """Log market open/close status."""
+        log_msg = f"MARKET STATUS | {status}" + (f" | {reason}" if reason else "")
+        app_logger.info(log_msg)
 
 
 # Singleton instance

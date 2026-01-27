@@ -192,6 +192,45 @@ Bot is waiting for market to open...
 Bot is now actively monitoring for trade signals.
         """
         return self.send_message(msg.strip())
+    
+    def send_check_status(self, check_count, symbols_data, positions, daily_pnl, total_pnl):
+        """Send status update for each check cycle."""
+        now = datetime.now().strftime('%H:%M:%S')
+        
+        # Build symbols status
+        symbols_text = ""
+        for data in symbols_data:
+            symbol = data['symbol']
+            price = data['price']
+            signal = data['signal']
+            rsi = data['indicators'].get('RSI', 0)
+            mtf = data['indicators'].get('MTF_Trend', 'N/A')
+            
+            signal_emoji = {"STRONG_BUY": "🔥", "BUY": "📈", "SELL": "📉", "HOLD": "⏸️", "WAIT": "⏳"}.get(signal, "❓")
+            symbols_text += f"\n<b>{symbol}</b>: ₹{price:.2f}\n   {signal_emoji} {signal} | RSI: {rsi:.1f} | MTF: {mtf}"
+        
+        # Build positions status
+        if positions:
+            pos_text = "\n\n<b>📍 Open Positions:</b>"
+            for sym, pos in positions.items():
+                current = next((d['price'] for d in symbols_data if d['symbol'] == sym), pos['buy_price'])
+                pnl = (current - pos['buy_price']) * pos['quantity']
+                pnl_pct = ((current - pos['buy_price']) / pos['buy_price']) * 100
+                emoji = "🟢" if pnl >= 0 else "🔴"
+                pos_text += f"\n{sym}: {pos['quantity']} @ ₹{pos['buy_price']:.2f}"
+                pos_text += f"\n   {emoji} ₹{pnl:.2f} ({pnl_pct:+.2f}%)"
+        else:
+            pos_text = "\n\n📍 No open positions"
+        
+        msg = f"""
+📊 <b>CHECK #{check_count}</b> | {now}
+{symbols_text}
+{pos_text}
+
+💰 Daily: ₹{daily_pnl:.2f} | Total: ₹{total_pnl:.2f}
+⏳ Next check in {Config.CHECK_INTERVAL_SECONDS}s
+        """
+        return self.send_message(msg.strip())
 
 
 # Singleton instance

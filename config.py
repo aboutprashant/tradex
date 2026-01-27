@@ -26,6 +26,11 @@ class Config:
     PAPER_TRADING = os.getenv("PAPER_TRADING", "True") == "True"
     CAPITAL = float(os.getenv("CAPITAL", 1000))
     
+    # Trading Strategy Version
+    # V1: Conservative - requires RSI < 70 AND MTF bullish
+    # V2: Aggressive - allows RSI up to 75-80 with STRONG_BULLISH MTF, and allows NEUTRAL MTF with oversold RSI
+    TRADING_VERSION = os.getenv("TRADING_VERSION", "V1")  # V1 or V2
+    
     # Symbols to trade (ETFs - expanded)
     SYMBOLS = os.getenv("SYMBOLS", "GOLDBEES-EQ,SILVERBEES-EQ,NIFTYBEES-EQ,BANKBEES-EQ").split(",")
     PRIMARY_SYMBOL = SYMBOLS[0] if SYMBOLS else "GOLDBEES-EQ"
@@ -55,6 +60,11 @@ class Config:
     RSI_PERIOD = 14
     RSI_OVERSOLD = 35
     RSI_OVERBOUGHT = 70
+    
+    # V2-specific thresholds (more aggressive)
+    RSI_OVERBOUGHT_V2_STRONG_BULLISH = 80  # Allow RSI up to 80 when MTF is STRONG_BULLISH
+    RSI_OVERBOUGHT_V2_BULLISH = 75  # Allow RSI up to 75 when MTF is BULLISH
+    
     VOLUME_MULTIPLIER = 1.0
     
     # ============================================
@@ -102,7 +112,7 @@ class Config:
     # DASHBOARD
     # ============================================
     DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
-    DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", 5000))
+    DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", 5001))  # Changed from 5000 to avoid AirPlay conflict
     
     # ============================================
     # LEARNING ENGINE
@@ -114,3 +124,8 @@ class Config:
     # SENTIMENT FILTER
     # ============================================
     SENTIMENT_ENABLED = os.getenv("SENTIMENT_ENABLED", "True") == "True"
+    
+    # ============================================
+    # TEST MODE (for testing buy entry logic)
+    # ============================================
+    TEST_MODE = os.getenv("TEST_MODE", "False") == "True"  # Set to True to force test entries
