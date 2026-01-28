@@ -85,8 +85,7 @@ def fetch_live_data(symbol, max_retries=3, retry_delay=2):
                 period="5d", 
                 interval="5m", 
                 progress=False,
-                timeout=10,
-                show_errors=False
+                timeout=10
             )
             
             # Check if data is empty or invalid
@@ -139,7 +138,7 @@ def _try_alternative_symbol_format(symbol):
     for alt_symbol in alternatives:
         try:
             print(f"   🔄 Trying alternative format: {alt_symbol}")
-            data = yf.download(alt_symbol, period="5d", interval="5m", progress=False, timeout=10, show_errors=False)
+            data = yf.download(alt_symbol, period="5d", interval="5m", progress=False, timeout=10)
             if data is not None and not data.empty:
                 print(f"   ✅ Success with alternative format: {alt_symbol}")
                 return data

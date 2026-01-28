@@ -111,7 +111,7 @@ class SupportResistance:
             df = None
             for attempt in range(3):
                 try:
-                    df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False, timeout=10, show_errors=False)
+                    df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False, timeout=10)
                     if df is not None and not df.empty:
                         break
                 except Exception as e:

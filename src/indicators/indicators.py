@@ -109,7 +109,7 @@ class MultiTimeframeAnalyzer:
             df = None
             for attempt in range(3):
                 try:
-                    df = yf.download(self.symbol, period="60d", interval="1d", progress=False, timeout=10, show_errors=False)
+                    df = yf.download(self.symbol, period="60d", interval="1d", progress=False, timeout=10)
                     if df is not None and not df.empty:
                         break
                 except Exception as e:
@@ -166,7 +166,7 @@ class MultiTimeframeAnalyzer:
             df = None
             for attempt in range(3):
                 try:
-                    df = yf.download(self.symbol, period="5d", interval="1h", progress=False, timeout=10, show_errors=False)
+                    df = yf.download(self.symbol, period="5d", interval="1h", progress=False, timeout=10)
                     if df is not None and not df.empty:
                         break
                 except Exception as e:
