@@ -244,6 +244,34 @@ class BrokerClient:
                             error_msg = response.get('message', '')
                             error_code = response.get('errorCode', '')
                             
+                            # Check for EDIS authorization error (AB1007)
+                            if 'EDIS' in error_msg.upper() or error_code == 'AB1007':
+                                print(f"\n{'='*70}")
+                                print(f"⚠️ EDIS AUTHORIZATION REQUIRED")
+                                print(f"{'='*70}")
+                                print(f"   Symbol: {symbol}")
+                                print(f"   Action: {side} {quantity} units")
+                                print(f"   Error: {error_msg}")
+                                print(f"\n   📋 EDIS Authorization Required:")
+                                print(f"   In India, selling stocks in DELIVERY mode requires EDIS authorization.")
+                                print(f"   You need to authorize the delivery instruction before selling.")
+                                print(f"\n   💡 Solutions:")
+                                print(f"   1. Authorize via Angel One mobile app:")
+                                print(f"      - Open Angel One app")
+                                print(f"      - Go to Orders → Pending EDIS")
+                                print(f"      - Authorize the delivery instruction")
+                                print(f"   2. Authorize via Angel One web platform:")
+                                print(f"      - Login to Angel One website")
+                                print(f"      - Go to Orders → EDIS Authorization")
+                                print(f"      - Authorize the pending delivery")
+                                print(f"   3. After authorization, the bot will retry on next check cycle")
+                                print(f"   4. Or place the order manually after authorization")
+                                print(f"{'='*70}\n")
+                                # Log this for tracking
+                                import logging
+                                logging.warning(f"EDIS authorization required for {symbol} - {side} {quantity} units")
+                                return None
+                            
                             # Check for cautionary listing error (AB4036)
                             if 'cautionary' in error_msg.lower() or error_code == 'AB4036':
                                 print(f"⚠️ {symbol} is on cautionary listing - cannot place MARKET orders")
@@ -344,6 +372,24 @@ class BrokerClient:
                 
         except Exception as e:
             error_str = str(e)
+            
+            # Check for EDIS authorization error in exception (AB1007)
+            if 'EDIS' in error_str.upper() or 'AB1007' in error_str:
+                print(f"\n{'='*70}")
+                print(f"⚠️ EDIS AUTHORIZATION REQUIRED")
+                print(f"{'='*70}")
+                print(f"   Symbol: {symbol}")
+                print(f"   Action: {side} {quantity} units")
+                print(f"   Error: {error_str}")
+                print(f"\n   📋 EDIS Authorization Required:")
+                print(f"   In India, selling stocks in DELIVERY mode requires EDIS authorization.")
+                print(f"   You need to authorize the delivery instruction before selling.")
+                print(f"\n   💡 Solutions:")
+                print(f"   1. Authorize via Angel One mobile app (Orders → Pending EDIS)")
+                print(f"   2. Authorize via Angel One web platform (Orders → EDIS Authorization)")
+                print(f"   3. After authorization, bot will retry on next check cycle")
+                print(f"{'='*70}\n")
+                return None
             
             # Check for cautionary listing error in exception
             if 'cautionary' in error_str.lower() or 'AB4036' in error_str:

@@ -556,19 +556,25 @@ def main():
                 
                 # Send overnight position alert at market close
                 if positions and last_daily_summary != now_date:
-                    overnight_positions = [
-                        {**pos, 'symbol': sym} 
-                        for sym, pos in positions.items()
-                    ]
-                    notifier.send_overnight_position_alert(overnight_positions)
+                    # Filter to only include positions for symbols in Config.SYMBOLS
+                    tracked_symbols = set(Config.SYMBOLS)
+                    filtered_positions = {sym: pos for sym, pos in positions.items() if sym in tracked_symbols}
                     
-                    # Send daily summary
+                    if filtered_positions:
+                        overnight_positions = [
+                            {**pos, 'symbol': sym} 
+                            for sym, pos in filtered_positions.items()
+                        ]
+                        notifier.send_overnight_position_alert(overnight_positions)
+                    
+                    # Send daily summary (count only tracked positions)
                     daily_stats = logger.get_daily_stats()
+                    tracked_positions_count = len(filtered_positions) if filtered_positions else 0
                     notifier.send_daily_summary(
                         daily_stats['trades'], 
                         daily_stats['pnl'],
                         total_pnl,
-                        len(positions)
+                        tracked_positions_count
                     )
                     last_daily_summary = now_date
                     daily_pnl = 0  # Reset daily PnL

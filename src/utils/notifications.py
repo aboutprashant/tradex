@@ -135,12 +135,25 @@ Please check the bot logs.
         return self.send_message(msg.strip())
     
     def send_overnight_position_alert(self, positions):
-        """Send overnight position holding alert."""
+        """Send overnight position holding alert. Only shows positions for symbols in Config.SYMBOLS."""
         if not positions:
             return
         
-        pos_text = ""
+        # Filter to only show positions for symbols in Config.SYMBOLS
+        # Normalize symbols to handle any whitespace or case issues
+        tracked_symbols = set(s.strip().upper() for s in Config.SYMBOLS)
+        filtered_positions = []
         for pos in positions:
+            symbol = pos.get('symbol', '')
+            symbol_normalized = symbol.strip().upper() if isinstance(symbol, str) else str(symbol).strip().upper()
+            if symbol_normalized in tracked_symbols:
+                filtered_positions.append(pos)
+        
+        if not filtered_positions:
+            return  # Don't send alert if no tracked positions
+        
+        pos_text = ""
+        for pos in filtered_positions:
             pnl = (pos.get('current_price', pos['buy_price']) - pos['buy_price']) * pos['quantity']
             pos_text += f"\n• {pos['symbol']}: {pos['quantity']} @ ₹{pos['buy_price']:.2f} (PnL: ₹{pnl:.2f})"
         
@@ -194,26 +207,41 @@ Bot is now actively monitoring for trade signals.
         return self.send_message(msg.strip())
     
     def send_check_status(self, check_count, symbols_data, positions, daily_pnl, total_pnl):
-        """Send status update for each check cycle."""
+        """Send status update for each check cycle. Only shows symbols from Config.SYMBOLS."""
         now = datetime.now().strftime('%H:%M:%S')
         
-        # Build symbols status
+        # Filter to only show symbols from Config.SYMBOLS (env file)
+        # Normalize symbols to handle any whitespace or case issues
+        tracked_symbols = set(s.strip().upper() for s in Config.SYMBOLS)
+        
+        # Build symbols status (only from env file)
         symbols_text = ""
         for data in symbols_data:
-            symbol = data['symbol']
+            symbol = data['symbol'].strip().upper() if isinstance(data['symbol'], str) else str(data['symbol']).strip().upper()
+            # Only include symbols from Config.SYMBOLS
+            if symbol not in tracked_symbols:
+                continue
+                
             price = data['price']
             signal = data['signal']
             rsi = data['indicators'].get('RSI', 0)
             mtf = data['indicators'].get('MTF_Trend', 'N/A')
             
             signal_emoji = {"STRONG_BUY": "🔥", "BUY": "📈", "SELL": "📉", "HOLD": "⏸️", "WAIT": "⏳"}.get(signal, "❓")
-            symbols_text += f"\n<b>{symbol}</b>: ₹{price:.2f}\n   {signal_emoji} {signal} | RSI: {rsi:.1f} | MTF: {mtf}"
+            symbols_text += f"\n<b>{data['symbol']}</b>: ₹{price:.2f}\n   {signal_emoji} {signal} | RSI: {rsi:.1f} | MTF: {mtf}"
         
-        # Build positions status
-        if positions:
+        # Build positions status (only for symbols in Config.SYMBOLS)
+        # Normalize position keys for comparison
+        filtered_positions = {}
+        for sym, pos in positions.items():
+            sym_normalized = sym.strip().upper() if isinstance(sym, str) else str(sym).strip().upper()
+            if sym_normalized in tracked_symbols:
+                filtered_positions[sym] = pos
+        
+        if filtered_positions:
             pos_text = "\n\n<b>📍 Open Positions:</b>"
-            for sym, pos in positions.items():
-                current = next((d['price'] for d in symbols_data if d['symbol'] == sym), pos['buy_price'])
+            for sym, pos in filtered_positions.items():
+                current = next((d['price'] for d in symbols_data if d['symbol'] == sym), pos.get('current_price', pos['buy_price']))
                 pnl = (current - pos['buy_price']) * pos['quantity']
                 pnl_pct = ((current - pos['buy_price']) / pos['buy_price']) * 100
                 emoji = "🟢" if pnl >= 0 else "🔴"
