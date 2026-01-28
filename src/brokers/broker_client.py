@@ -431,6 +431,10 @@ class BrokerClient:
             print(f"   📥 Raw API response: {positions}")
             if positions:
                 data = positions.get('data', [])
+                # Check if data is None (API can return success with None data)
+                if data is None:
+                    print("   ℹ️ API returned success but no position data (data is None)")
+                    return []
                 print(f"   📊 Found {len(data)} position(s) in response")
                 return data
             else:

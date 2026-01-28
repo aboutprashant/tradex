@@ -49,6 +49,7 @@ from src.strategies.position_sizing import position_sizer
 from src.indicators.support_resistance import sr_detector
 from src.ml.ml_model import ml_predictor
 from src.indicators.sentiment import sentiment_filter
+from src.utils.data_fetcher import get_data_fetcher
 
 # ============================================
 # UTILITY FUNCTIONS
@@ -102,57 +103,54 @@ def is_high_liquidity_window():
     return False, "Low liquidity period"
 
 
-def fetch_live_data(symbol, max_retries=3, retry_delay=5):
-    """Fetches the last 5 days of 5-minute data with retry logic and aggressive error suppression."""
-    yf_symbol = symbol.replace("-EQ", ".NS")
+# Global broker instance (initialized in main())
+broker = None
+
+def fetch_live_data(symbol, period="5d", interval="5m"):
+    """
+    Fetches market data using intelligent fallback mechanism.
     
-    for attempt in range(max_retries):
+    PRIMARY: Angel One API (reliable, works on AWS production)
+    FALLBACK: yfinance (only if Angel One fails)
+    
+    This SOLVES the AWS production issue by using Angel One API
+    which doesn't have IP-based rate limiting issues.
+    """
+    global broker
+    
+    # Try Angel One API first (reliable on AWS)
+    if broker is not None:
         try:
-            # Add delay between retries to avoid rate limiting
-            if attempt > 0:
-                wait_time = retry_delay * (attempt + 1)
-                time.sleep(wait_time)
-            
-            # Aggressively suppress all yfinance output
-            with suppress_yfinance_errors():
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    try:
-                        data = yf.download(
-                            yf_symbol, 
-                            period="5d", 
-                            interval="5m", 
-                            progress=False,
-                            timeout=15,
-                            threads=False  # Disable threading to avoid issues
-                        )
-                    except Exception:
-                        # Suppress all exceptions - will be caught below
-                        if attempt < max_retries - 1:
-                            continue
-                        raise
-            
-            # Check if data is empty or invalid
-            if data is None or data.empty:
-                if attempt < max_retries - 1:
-                    continue  # Retry silently
-                else:
-                    # Only log on final failure, and only once per cycle
-                    return pd.DataFrame()  # Return empty DataFrame
-            
-            # Success - return data
-            return data
-            
-        except Exception:
-            # Suppress all errors - just retry or return empty
-            if attempt < max_retries - 1:
-                continue  # Silent retry
-            else:
-                # Silent failure - return empty DataFrame
-                return pd.DataFrame()
+            data_fetcher = get_data_fetcher(broker)
+            data = data_fetcher.fetch_live_data(symbol, period, interval)
+            if data is not None and not data.empty:
+                return data
+        except Exception as e:
+            # Fallback to yfinance if Angel One fails
+            pass
     
-    # If we get here, all retries failed
-    return pd.DataFrame()
+    # Fallback to yfinance (may fail on AWS, but worth trying)
+    return _fetch_from_yfinance_fallback(symbol, period, interval)
+
+
+def _fetch_from_yfinance_fallback(symbol, period="5d", interval="5m"):
+    """Fallback to yfinance if Angel One fails."""
+    try:
+        yf_symbol = symbol.replace("-EQ", ".NS")
+        with suppress_yfinance_errors():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = yf.download(
+                    yf_symbol,
+                    period=period,
+                    interval=interval,
+                    progress=False,
+                    timeout=15,
+                    threads=False
+                )
+        return data if data is not None and not data.empty else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 
 def _try_alternative_symbol_format(symbol):
@@ -503,6 +501,7 @@ def main():
         app_logger.info(f"   V2 Features: Relaxed RSI (STRONG_BULLISH:80, BULLISH:75) | NEUTRAL MTF allowed with oversold RSI")
     app_logger.info("="*80)
     
+    global broker
     broker = BrokerClient()
     if not broker.login():
         app_logger.error("❌ Broker login failed - bot stopped")
