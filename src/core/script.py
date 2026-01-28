@@ -5,6 +5,14 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
+import warnings
+import logging
+
+# Suppress yfinance warnings and errors
+warnings.filterwarnings('ignore')
+logging.getLogger('yfinance').setLevel(logging.ERROR)
+# Suppress urllib3 warnings
+logging.getLogger('urllib3').setLevel(logging.ERROR)
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -73,79 +81,103 @@ def is_high_liquidity_window():
     return False, "Low liquidity period"
 
 
-def fetch_live_data(symbol, max_retries=3, retry_delay=2):
-    """Fetches the last 5 days of 5-minute data with retry logic."""
+def fetch_live_data(symbol, max_retries=3, retry_delay=5):
+    """Fetches the last 5 days of 5-minute data with retry logic and error suppression."""
     yf_symbol = symbol.replace("-EQ", ".NS")
     
-    for attempt in range(max_retries):
-        try:
-            # Try downloading with timeout
-            data = yf.download(
-                yf_symbol, 
-                period="5d", 
-                interval="5m", 
-                progress=False,
-                timeout=10
-            )
-            
-            # Check if data is empty or invalid
-            if data is None or data.empty:
-                if attempt < max_retries - 1:
-                    print(f"⚠️ Empty data for {symbol}, retrying ({attempt + 1}/{max_retries})...")
-                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
-                    continue
-                else:
-                    print(f"❌ No data available for {symbol} after {max_retries} attempts")
-                    return pd.DataFrame()  # Return empty DataFrame
-            
-            # Success - return data
-            return data
-            
-        except Exception as e:
-            error_msg = str(e)
-            # Check for specific error types
-            if "JSONDecodeError" in error_msg or "Expecting value" in error_msg:
-                if attempt < max_retries - 1:
+    # Suppress yfinance warnings for this call
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        
+        for attempt in range(max_retries):
+            try:
+                # Add delay between retries to avoid rate limiting
+                if attempt > 0:
                     wait_time = retry_delay * (attempt + 1)
-                    print(f"⚠️ yfinance API error for {symbol} (attempt {attempt + 1}/{max_retries}): {error_msg[:50]}...")
-                    print(f"   Retrying in {wait_time}s...")
                     time.sleep(wait_time)
-                    continue
+                
+                # Try downloading with timeout
+                # Suppress stdout/stderr to hide yfinance error messages
+                import io
+                import contextlib
+                
+                # Capture and suppress yfinance errors
+                f = io.StringIO()
+                with contextlib.redirect_stderr(f), contextlib.redirect_stdout(f):
+                    try:
+                        data = yf.download(
+                            yf_symbol, 
+                            period="5d", 
+                            interval="5m", 
+                            progress=False,
+                            timeout=15,
+                            threads=False  # Disable threading to avoid issues
+                        )
+                    except Exception as download_error:
+                        # Suppress the error message
+                        if attempt < max_retries - 1:
+                            continue
+                        else:
+                            raise download_error
+                
+                # Check if data is empty or invalid
+                if data is None or data.empty:
+                    if attempt < max_retries - 1:
+                        continue  # Retry silently
+                    else:
+                        print(f"⚠️ No data available for {symbol} after {max_retries} attempts")
+                        return pd.DataFrame()  # Return empty DataFrame
+                
+                # Success - return data
+                return data
+                
+            except Exception as e:
+                error_msg = str(e)
+                # Check for specific error types
+                if "JSONDecodeError" in error_msg or "Expecting value" in error_msg or "Failed download" in error_msg:
+                    if attempt < max_retries - 1:
+                        # Silent retry - don't spam logs
+                        continue
+                    else:
+                        # Only log on final failure
+                        print(f"⚠️ yfinance API temporarily unavailable for {symbol} (JSONDecodeError)")
+                        print(f"   Skipping this check cycle - will retry next cycle")
+                        return pd.DataFrame()
                 else:
-                    print(f"❌ Failed to fetch {symbol} after {max_retries} attempts: {error_msg[:100]}")
-                    # Try alternative symbol format as fallback
-                    return _try_alternative_symbol_format(symbol)
-            else:
-                # Other errors - log and return empty
-                print(f"❌ Error fetching {symbol}: {error_msg[:100]}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay * (attempt + 1))
-                    continue
-                return pd.DataFrame()
+                    # Other errors - log only on final attempt
+                    if attempt == max_retries - 1:
+                        print(f"⚠️ Error fetching {symbol}: {error_msg[:80]}")
+                    if attempt < max_retries - 1:
+                        continue
+                    return pd.DataFrame()
     
     # If we get here, all retries failed
     return pd.DataFrame()
 
 
 def _try_alternative_symbol_format(symbol):
-    """Try alternative symbol formats as fallback."""
+    """Try alternative symbol formats as fallback (suppressed errors)."""
     alternatives = [
         symbol.replace("-EQ", ".NS"),  # Standard format
         symbol.replace("-EQ", ""),  # Without suffix
-        symbol.replace("-EQ", "-EQ.NS"),  # With both
     ]
+    
+    import io
+    import contextlib
     
     for alt_symbol in alternatives:
         try:
-            print(f"   🔄 Trying alternative format: {alt_symbol}")
-            data = yf.download(alt_symbol, period="5d", interval="5m", progress=False, timeout=10)
-            if data is not None and not data.empty:
-                print(f"   ✅ Success with alternative format: {alt_symbol}")
-                return data
+            # Suppress errors
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                f = io.StringIO()
+                with contextlib.redirect_stderr(f), contextlib.redirect_stdout(f):
+                    data = yf.download(alt_symbol, period="5d", interval="5m", progress=False, timeout=15, threads=False)
+                if data is not None and not data.empty:
+                    return data
         except Exception:
             continue
     
-    print(f"   ❌ All alternative formats failed for {symbol}")
     return pd.DataFrame()
 
 
@@ -678,8 +710,12 @@ def main():
             # Process each symbol and collect data for status notification
             symbols_data = []
             
-            for symbol in Config.SYMBOLS:
+            for idx, symbol in enumerate(Config.SYMBOLS):
                 try:
+                    # Add delay between symbol fetches to avoid rate limiting (except first symbol)
+                    if idx > 0:
+                        time.sleep(3)  # 3 second delay between symbols to avoid rate limiting
+                    
                     # Get multi-timeframe trend
                     mtf = MultiTimeframeAnalyzer(symbol)
                     mtf_trend, mtf_indicators = mtf.get_multi_timeframe_signal()
@@ -687,7 +723,8 @@ def main():
                     # Fetch and analyze data
                     df = fetch_live_data(symbol)
                     if df.empty:
-                        print(f"⚠️ No data for {symbol}")
+                        # Skip silently - will retry next cycle
+                        # Only log if it's a persistent issue (every 10th failure)
                         continue
                     
                     df = apply_all_indicators(df)

@@ -1,6 +1,13 @@
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import warnings
+import logging
+
+# Suppress yfinance warnings and errors
+warnings.filterwarnings('ignore')
+logging.getLogger('yfinance').setLevel(logging.ERROR)
+logging.getLogger('urllib3').setLevel(logging.ERROR)
 from src.core.config import Config
 
 def calculate_rsi(prices, period=14):
