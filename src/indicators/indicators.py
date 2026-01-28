@@ -3,12 +3,32 @@ import numpy as np
 import yfinance as yf
 import warnings
 import logging
+import sys
+import os
+from contextlib import contextmanager
 
 # Suppress yfinance warnings and errors
 warnings.filterwarnings('ignore')
-logging.getLogger('yfinance').setLevel(logging.ERROR)
-logging.getLogger('urllib3').setLevel(logging.ERROR)
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+logging.getLogger('requests').setLevel(logging.CRITICAL)
+
 from src.core.config import Config
+
+# Create aggressive error suppression context manager
+@contextmanager
+def suppress_yfinance_errors():
+    """Aggressively suppress all yfinance error output."""
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    try:
+        with open(os.devnull, 'w') as devnull:
+            sys.stdout = devnull
+            sys.stderr = devnull
+            yield
+    finally:
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
 def calculate_rsi(prices, period=14):
     """
@@ -112,20 +132,36 @@ class MultiTimeframeAnalyzer:
         Returns: 'BULLISH', 'BEARISH', or 'NEUTRAL'
         """
         try:
-            # Retry logic for yfinance API calls
+            # Retry logic for yfinance API calls with error suppression
             df = None
+            import io
+            import contextlib
+            import os
+            
             for attempt in range(3):
                 try:
-                    df = yf.download(self.symbol, period="60d", interval="1d", progress=False, timeout=10)
-                    if df is not None and not df.empty:
-                        break
+                    # Aggressively suppress yfinance errors
+                    with suppress_yfinance_errors():
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            try:
+                                df = yf.download(self.symbol, period="60d", interval="1d", progress=False, timeout=10, threads=False)
+                                if df is not None and not df.empty:
+                                    break
+                            except Exception:
+                                # Suppress all exceptions during download
+                                if attempt < 2:
+                                    import time
+                                    time.sleep(2 * (attempt + 1))
+                                    continue
+                                raise
                 except Exception as e:
                     if attempt < 2:
                         import time
                         time.sleep(2 * (attempt + 1))  # Exponential backoff
                         continue
                     else:
-                        print(f"⚠️ Error fetching daily trend for {self.symbol}: {e}")
+                        # Silent failure - don't print errors
                         return "NEUTRAL", {}
             
             if df is None or df.empty or len(df) < 20:
@@ -169,20 +205,35 @@ class MultiTimeframeAnalyzer:
         Returns: 'BULLISH', 'BEARISH', or 'NEUTRAL'
         """
         try:
-            # Retry logic for yfinance API calls
+            # Retry logic for yfinance API calls with error suppression
             df = None
+            import io
+            import contextlib
+            
             for attempt in range(3):
                 try:
-                    df = yf.download(self.symbol, period="5d", interval="1h", progress=False, timeout=10)
-                    if df is not None and not df.empty:
-                        break
+                    # Aggressively suppress yfinance errors
+                    with suppress_yfinance_errors():
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            try:
+                                df = yf.download(self.symbol, period="5d", interval="1h", progress=False, timeout=10, threads=False)
+                                if df is not None and not df.empty:
+                                    break
+                            except Exception:
+                                # Suppress all exceptions during download
+                                if attempt < 2:
+                                    import time
+                                    time.sleep(2 * (attempt + 1))
+                                    continue
+                                raise
                 except Exception as e:
                     if attempt < 2:
                         import time
                         time.sleep(2 * (attempt + 1))  # Exponential backoff
                         continue
                     else:
-                        print(f"⚠️ Error fetching hourly trend for {self.symbol}: {e}")
+                        # Silent failure - don't print errors
                         return "NEUTRAL", {}
             
             if df is None or df.empty or len(df) < 20:

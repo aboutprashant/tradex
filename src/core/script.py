@@ -7,12 +7,33 @@ from datetime import datetime, timedelta
 import pytz
 import warnings
 import logging
+from contextlib import contextmanager
+from io import StringIO
 
 # Suppress yfinance warnings and errors
 warnings.filterwarnings('ignore')
-logging.getLogger('yfinance').setLevel(logging.ERROR)
-# Suppress urllib3 warnings
-logging.getLogger('urllib3').setLevel(logging.ERROR)
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)  # Only show critical errors
+logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+logging.getLogger('requests').setLevel(logging.CRITICAL)
+
+# Create a more aggressive error suppression context manager
+@contextmanager
+def suppress_yfinance_errors():
+    """Aggressively suppress all yfinance error output."""
+    # Save original stdout/stderr
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    
+    # Redirect to null device
+    try:
+        with open(os.devnull, 'w') as devnull:
+            sys.stdout = devnull
+            sys.stderr = devnull
+            yield
+    finally:
+        # Restore original stdout/stderr
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -82,28 +103,20 @@ def is_high_liquidity_window():
 
 
 def fetch_live_data(symbol, max_retries=3, retry_delay=5):
-    """Fetches the last 5 days of 5-minute data with retry logic and error suppression."""
+    """Fetches the last 5 days of 5-minute data with retry logic and aggressive error suppression."""
     yf_symbol = symbol.replace("-EQ", ".NS")
     
-    # Suppress yfinance warnings for this call
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        
-        for attempt in range(max_retries):
-            try:
-                # Add delay between retries to avoid rate limiting
-                if attempt > 0:
-                    wait_time = retry_delay * (attempt + 1)
-                    time.sleep(wait_time)
-                
-                # Try downloading with timeout
-                # Suppress stdout/stderr to hide yfinance error messages
-                import io
-                import contextlib
-                
-                # Capture and suppress yfinance errors
-                f = io.StringIO()
-                with contextlib.redirect_stderr(f), contextlib.redirect_stdout(f):
+    for attempt in range(max_retries):
+        try:
+            # Add delay between retries to avoid rate limiting
+            if attempt > 0:
+                wait_time = retry_delay * (attempt + 1)
+                time.sleep(wait_time)
+            
+            # Aggressively suppress all yfinance output
+            with suppress_yfinance_errors():
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
                     try:
                         data = yf.download(
                             yf_symbol, 
@@ -113,43 +126,30 @@ def fetch_live_data(symbol, max_retries=3, retry_delay=5):
                             timeout=15,
                             threads=False  # Disable threading to avoid issues
                         )
-                    except Exception as download_error:
-                        # Suppress the error message
+                    except Exception:
+                        # Suppress all exceptions - will be caught below
                         if attempt < max_retries - 1:
                             continue
-                        else:
-                            raise download_error
-                
-                # Check if data is empty or invalid
-                if data is None or data.empty:
-                    if attempt < max_retries - 1:
-                        continue  # Retry silently
-                    else:
-                        print(f"⚠️ No data available for {symbol} after {max_retries} attempts")
-                        return pd.DataFrame()  # Return empty DataFrame
-                
-                # Success - return data
-                return data
-                
-            except Exception as e:
-                error_msg = str(e)
-                # Check for specific error types
-                if "JSONDecodeError" in error_msg or "Expecting value" in error_msg or "Failed download" in error_msg:
-                    if attempt < max_retries - 1:
-                        # Silent retry - don't spam logs
-                        continue
-                    else:
-                        # Only log on final failure
-                        print(f"⚠️ yfinance API temporarily unavailable for {symbol} (JSONDecodeError)")
-                        print(f"   Skipping this check cycle - will retry next cycle")
-                        return pd.DataFrame()
+                        raise
+            
+            # Check if data is empty or invalid
+            if data is None or data.empty:
+                if attempt < max_retries - 1:
+                    continue  # Retry silently
                 else:
-                    # Other errors - log only on final attempt
-                    if attempt == max_retries - 1:
-                        print(f"⚠️ Error fetching {symbol}: {error_msg[:80]}")
-                    if attempt < max_retries - 1:
-                        continue
-                    return pd.DataFrame()
+                    # Only log on final failure, and only once per cycle
+                    return pd.DataFrame()  # Return empty DataFrame
+            
+            # Success - return data
+            return data
+            
+        except Exception:
+            # Suppress all errors - just retry or return empty
+            if attempt < max_retries - 1:
+                continue  # Silent retry
+            else:
+                # Silent failure - return empty DataFrame
+                return pd.DataFrame()
     
     # If we get here, all retries failed
     return pd.DataFrame()
@@ -716,9 +716,12 @@ def main():
                     if idx > 0:
                         time.sleep(3)  # 3 second delay between symbols to avoid rate limiting
                     
-                    # Get multi-timeframe trend
-                    mtf = MultiTimeframeAnalyzer(symbol)
-                    mtf_trend, mtf_indicators = mtf.get_multi_timeframe_signal()
+                    # Get multi-timeframe trend (with aggressive error suppression)
+                    with suppress_yfinance_errors():
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            mtf = MultiTimeframeAnalyzer(symbol)
+                            mtf_trend, mtf_indicators = mtf.get_multi_timeframe_signal()
                     
                     # Fetch and analyze data
                     df = fetch_live_data(symbol)

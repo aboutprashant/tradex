@@ -5,7 +5,32 @@ Dynamically selects the best performing symbols to trade.
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
+import warnings
+import logging
+import sys
+import os
+from contextlib import contextmanager
 from src.core.config import Config
+
+# Suppress yfinance warnings and errors
+warnings.filterwarnings('ignore')
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+
+# Create aggressive error suppression context manager
+@contextmanager
+def suppress_yfinance_errors():
+    """Aggressively suppress all yfinance error output."""
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    try:
+        with open(os.devnull, 'w') as devnull:
+            sys.stdout = devnull
+            sys.stderr = devnull
+            yield
+    finally:
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
 # All available symbols for trading
 SYMBOL_UNIVERSE = {
@@ -52,20 +77,23 @@ class SymbolManager:
         """
         try:
             yf_symbol = self.get_yf_symbol(symbol)
-            # Retry logic for yfinance API calls
+            # Retry logic for yfinance API calls with error suppression
             df = None
             for attempt in range(3):
                 try:
-                    df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False, timeout=10)
-                    if df is not None and not df.empty:
-                        break
-                except Exception as e:
+                    with suppress_yfinance_errors():
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False, timeout=10, threads=False)
+                            if df is not None and not df.empty:
+                                break
+                except Exception:
                     if attempt < 2:
                         import time
                         time.sleep(2 * (attempt + 1))  # Exponential backoff
                         continue
                     else:
-                        print(f"⚠️ Error fetching momentum for {symbol}: {e}")
+                        # Silent failure
                         return 0
             
             if df is None or df.empty or len(df) < 10:
