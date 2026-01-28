@@ -29,7 +29,9 @@ class DataFetcher:
     def __init__(self, broker_client: BrokerClient):
         self.broker = broker_client
         self.cache = {}  # Simple in-memory cache
-        self.cache_ttl = 60  # Cache for 60 seconds
+        self.cache_ttl = 300  # Cache for 5 minutes (300 seconds) to reduce API calls
+        self.last_api_call_time = {}  # Track last API call per symbol
+        self.min_call_interval = 5  # Minimum 5 seconds between API calls for same symbol
         
     def _get_from_cache(self, symbol, interval):
         """Get data from cache if available and fresh."""
@@ -49,8 +51,17 @@ class DataFetcher:
         """
         Fetch data from Angel One API (primary source).
         This works reliably on AWS production.
+        Includes rate limiting to prevent exceeding API limits.
         """
         try:
+            # Rate limiting: Check if we called this symbol recently
+            now = datetime.now()
+            if symbol in self.last_api_call_time:
+                time_since_last = (now - self.last_api_call_time[symbol]).total_seconds()
+                if time_since_last < self.min_call_interval:
+                    wait_time = self.min_call_interval - time_since_last
+                    time.sleep(wait_time)
+            
             token = self.broker.get_token(symbol)
             if not token:
                 return None
@@ -59,6 +70,9 @@ class DataFetcher:
             if not self.broker.session_data:
                 if not self.broker.login():
                     return None
+            
+            # Record API call time
+            self.last_api_call_time[symbol] = datetime.now()
             
             # Calculate date range
             end_date = datetime.now()

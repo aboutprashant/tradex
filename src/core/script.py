@@ -587,7 +587,7 @@ def main():
     last_market_closed_alert = None
     market_was_open = False
     last_position_sync = None
-    POSITION_SYNC_INTERVAL = 300  # Sync positions every 5 minutes (300 seconds)
+    POSITION_SYNC_INTERVAL = 600  # Sync positions every 10 minutes (600 seconds) to avoid rate limits
 
     while True:
         try:
@@ -601,47 +601,66 @@ def main():
             app_logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             app_logger.info(f"🔄 CHECK CYCLE #{check_count} | {now_ist.strftime('%Y-%m-%d %H:%M:%S IST')}")
             
-            # Periodically sync positions from broker (every 5 minutes)
+            # Periodically sync positions from broker (every 10 minutes)
             if last_position_sync is None or (now_ist - last_position_sync).total_seconds() >= POSITION_SYNC_INTERVAL:
                 try:
                     broker_positions = broker.sync_all_positions()
-                    for symbol, broker_pos in broker_positions.items():
-                        if symbol in positions:
-                            # Update existing position with latest price from broker
-                            positions[symbol]['current_price'] = broker_pos.get('current_price', positions[symbol].get('buy_price', 0))
-                            # Update highest_price if current price is higher
-                            if broker_pos.get('current_price', 0) > positions[symbol].get('highest_price', 0):
-                                positions[symbol]['highest_price'] = broker_pos['current_price']
-                            # Update quantity if it changed (manual adjustment)
-                            if abs(broker_pos['quantity'] - positions[symbol]['quantity']) > 0.01:
-                                print(f"   🔄 Position quantity updated: {symbol} ({positions[symbol]['quantity']} → {broker_pos['quantity']})")
-                                positions[symbol]['quantity'] = broker_pos['quantity']
-                        else:
-                            # New position detected from broker
-                            positions[symbol] = broker_pos
-                            print(f"   📍 New external position detected: {symbol} - {broker_pos['quantity']} @ ₹{broker_pos['buy_price']:.2f}")
                     
-                    # Remove positions that no longer exist in broker account
-                    broker_symbols = set(broker_positions.keys())
-                    positions_to_remove = []
-                    for symbol in positions.keys():
-                        if symbol not in broker_symbols and positions[symbol].get('bot_entered', True):
-                            # Only remove bot-entered positions that are closed
-                            # Keep external positions in case they're in different format
-                            pass
-                        elif symbol not in broker_symbols and not positions[symbol].get('bot_entered', False):
-                            # External position closed
-                            positions_to_remove.append(symbol)
+                    # Only process positions if API call succeeded (broker_positions is not None)
+                    # If API failed, broker_positions might be empty dict, but we should check if it's a real failure
+                    # by checking if we got an error vs. just no positions
                     
-                    for symbol in positions_to_remove:
-                        print(f"   🗑️ External position closed: {symbol}")
-                        del positions[symbol]
+                    # Check if sync actually succeeded (not a rate limit failure)
+                    sync_succeeded = broker_positions is not None
                     
-                    last_position_sync = now_ist
-                    if broker_positions:
-                        logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
+                    if sync_succeeded:
+                        for symbol, broker_pos in broker_positions.items():
+                            if symbol in positions:
+                                # Update existing position with latest price from broker
+                                positions[symbol]['current_price'] = broker_pos.get('current_price', positions[symbol].get('buy_price', 0))
+                                # Update highest_price if current price is higher
+                                if broker_pos.get('current_price', 0) > positions[symbol].get('highest_price', 0):
+                                    positions[symbol]['highest_price'] = broker_pos['current_price']
+                                # Update quantity if it changed (manual adjustment)
+                                if abs(broker_pos['quantity'] - positions[symbol]['quantity']) > 0.01:
+                                    print(f"   🔄 Position quantity updated: {symbol} ({positions[symbol]['quantity']} → {broker_pos['quantity']})")
+                                    positions[symbol]['quantity'] = broker_pos['quantity']
+                            else:
+                                # New position detected from broker
+                                positions[symbol] = broker_pos
+                                print(f"   📍 New external position detected: {symbol} - {broker_pos['quantity']} @ ₹{broker_pos['buy_price']:.2f}")
+                        
+                        # Only remove positions if sync succeeded AND we got valid data
+                        # If broker_positions is empty dict, it means no positions exist (valid state)
+                        broker_symbols = set(broker_positions.keys())
+                        positions_to_remove = []
+                        for symbol in positions.keys():
+                            if symbol not in broker_symbols and positions[symbol].get('bot_entered', True):
+                                # Only remove bot-entered positions that are closed
+                                # Keep external positions in case they're in different format
+                                pass
+                            elif symbol not in broker_symbols and not positions[symbol].get('bot_entered', False):
+                                # External position closed (only if sync succeeded)
+                                positions_to_remove.append(symbol)
+                        
+                        for symbol in positions_to_remove:
+                            print(f"   🗑️ External position closed: {symbol}")
+                            del positions[symbol]
+                        
+                        last_position_sync = now_ist
+                        if broker_positions:
+                            logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
+                        
+                        # Add delay after position sync to avoid rate limiting
+                        time.sleep(3)  # 3 second delay after position sync
+                    else:
+                        # Sync failed (likely rate limit) - don't delete positions, just skip this cycle
+                        print(f"   ⚠️ Position sync skipped due to API failure. Keeping existing positions.")
+                        # Don't update last_position_sync so we'll retry sooner
                 except Exception as e:
                     app_logger.warning(f"Failed to sync positions: {e}")
+                    # Don't delete positions on exception - keep them
+                    print(f"   ⚠️ Position sync failed. Keeping existing positions to avoid data loss.")
             
             # Check if market is open (uses IST internally)
             market_open, market_status = is_market_open()
@@ -713,7 +732,7 @@ def main():
                 try:
                     # Add delay between symbol fetches to avoid rate limiting (except first symbol)
                     if idx > 0:
-                        time.sleep(3)  # 3 second delay between symbols to avoid rate limiting
+                        time.sleep(5)  # 5 second delay between symbols to avoid rate limiting (increased for AWS)
                     
                     # Get multi-timeframe trend (with aggressive error suppression)
                     with suppress_yfinance_errors():

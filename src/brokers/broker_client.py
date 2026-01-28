@@ -1,8 +1,41 @@
 import pyotp
 import requests
 import pandas as pd
+import time
+from datetime import datetime, timedelta
 from SmartApi import SmartConnect
 from src.core.config import Config
+
+class RateLimiter:
+    """Simple rate limiter to prevent exceeding API rate limits."""
+    def __init__(self, max_calls_per_minute=30):
+        self.max_calls = max_calls_per_minute
+        self.calls = []
+        self.min_delay = 2.0  # Minimum 2 seconds between calls
+    
+    def wait_if_needed(self):
+        """Wait if we're approaching rate limit."""
+        now = datetime.now()
+        # Remove calls older than 1 minute
+        self.calls = [call_time for call_time in self.calls 
+                     if (now - call_time).total_seconds() < 60]
+        
+        # If we're close to limit, wait
+        if len(self.calls) >= self.max_calls * 0.8:  # 80% of limit
+            wait_time = 60 - (now - self.calls[0]).total_seconds() if self.calls else self.min_delay
+            if wait_time > 0:
+                print(f"   ⏳ Rate limit protection: waiting {wait_time:.1f}s...")
+                time.sleep(wait_time)
+        
+        # Always maintain minimum delay between calls
+        if self.calls:
+            last_call = self.calls[-1]
+            time_since_last = (now - last_call).total_seconds()
+            if time_since_last < self.min_delay:
+                time.sleep(self.min_delay - time_since_last)
+        
+        # Record this call
+        self.calls.append(datetime.now())
 
 class BrokerClient:
     def __init__(self):
@@ -11,6 +44,8 @@ class BrokerClient:
         self.token_cache = {}  # Cache for symbol tokens
         self.symbol_info = {}  # Cache for symbol info (token + trading_symbol name)
         self.last_login_time = None
+        self.rate_limiter = RateLimiter(max_calls_per_minute=30)  # Angel One limit is ~30/min
+        self.last_api_call_time = None
         self._load_tokens()
     
     def _load_tokens(self):
@@ -417,15 +452,37 @@ class BrokerClient:
             print(f"❌ Failed to place Angel One order: {e}")
             return None
     
+    def _handle_rate_limit_error(self, error_msg, retry_func, max_retries=3):
+        """Handle rate limit errors with exponential backoff."""
+        if "exceeding access rate" in str(error_msg).lower() or "rate" in str(error_msg).lower():
+            for attempt in range(max_retries):
+                wait_time = (2 ** attempt) * 5  # 5s, 10s, 20s
+                print(f"   ⚠️ Rate limit hit. Waiting {wait_time}s before retry {attempt + 1}/{max_retries}...")
+                time.sleep(wait_time)
+                try:
+                    return retry_func()
+                except Exception as retry_error:
+                    if attempt == max_retries - 1:
+                        raise retry_error
+                    if "exceeding access rate" not in str(retry_error).lower():
+                        raise retry_error
+            return None
+        return None
+    
     def get_positions(self):
-        """Get current positions from Angel One."""
+        """Get current positions from Angel One with rate limiting."""
         if Config.PAPER_TRADING:
             print("   ⚠️ PAPER TRADING mode - skipping broker position fetch")
             return []
-        try:
+        
+        def _fetch_positions():
             if not self._ensure_valid_token():
                 print("   ⚠️ Token validation failed - cannot fetch positions")
                 return []
+            
+            # Rate limit protection - wait BEFORE making the call
+            self.rate_limiter.wait_if_needed()
+            
             print("   🔄 Fetching positions from Angel One API...")
             positions = self.obj.position()
             print(f"   📥 Raw API response: {positions}")
@@ -440,11 +497,37 @@ class BrokerClient:
             else:
                 print("   ℹ️ No positions in API response")
                 return []
+        
+        # Rate limit protection BEFORE attempting call
+        self.rate_limiter.wait_if_needed()
+        
+        try:
+            return _fetch_positions()
         except Exception as e:
-            print(f"   ❌ Failed to get positions: {e}")
-            import traceback
-            print(f"   📋 Traceback: {traceback.format_exc()}")
-            return []
+            error_msg = str(e)
+            # Check if it's a rate limit error (handle SmartAPI DataException)
+            if ("exceeding access rate" in error_msg.lower() or 
+                "rate" in error_msg.lower() or
+                "access denied" in error_msg.lower()):
+                print(f"   ⚠️ Rate limit detected: {error_msg}")
+                print(f"   ⏳ Waiting 30 seconds before retry...")
+                time.sleep(30)  # Wait longer for rate limit
+                try:
+                    # Rate limit again before retry
+                    self.rate_limiter.wait_if_needed()
+                    return _fetch_positions()
+                except Exception as retry_error:
+                    retry_msg = str(retry_error)
+                    if "exceeding access rate" in retry_msg.lower() or "rate" in retry_msg.lower():
+                        print(f"   ⚠️ Still rate limited. Skipping this cycle.")
+                        return []  # Return empty instead of failing
+                    print(f"   ❌ Failed after retry: {retry_error}")
+                    return []
+            else:
+                print(f"   ❌ Failed to get positions: {e}")
+                import traceback
+                print(f"   📋 Traceback: {traceback.format_exc()}")
+                return []
     
     def normalize_broker_position(self, broker_pos):
         """
@@ -513,21 +596,75 @@ class BrokerClient:
         Fetch all positions from broker and normalize them.
         Returns a dictionary: symbol -> normalized position data
         Includes both intraday positions and delivery holdings.
+        Returns None if sync failed due to rate limiting (to prevent position deletion).
         """
+        sync_failed = False
+        
         # Get intraday positions
-        broker_positions = self.get_positions()
+        try:
+            broker_positions = self.get_positions()
+            # Check if positions call failed due to rate limit (empty list might be valid)
+            # We'll track this separately
+        except Exception as e:
+            error_msg = str(e)
+            if "exceeding access rate" in error_msg.lower() or "rate" in error_msg.lower():
+                sync_failed = True
+                broker_positions = []
+            else:
+                broker_positions = []
         
         # Also get delivery holdings (for DELIVERY product type positions)
-        print("   🔄 Fetching holdings from Angel One API...")
-        try:
+        # Add delay between position and holdings calls to avoid rate limiting
+        time.sleep(2)  # 2 second delay between API calls
+        
+        def _fetch_holdings():
             if not Config.PAPER_TRADING and self._ensure_valid_token():
+                # Rate limit protection
+                self.rate_limiter.wait_if_needed()
                 holdings = self.obj.holding()
                 holdings_data = holdings.get('data', []) if holdings else []
                 print(f"   📊 Found {len(holdings_data)} holding(s) in response")
-                # Add holdings to positions list
-                broker_positions.extend(holdings_data)
+                return holdings_data
+            return []
+        
+        print("   🔄 Fetching holdings from Angel One API...")
+        # Rate limit protection BEFORE attempting call
+        self.rate_limiter.wait_if_needed()
+        
+        try:
+            holdings_data = _fetch_holdings()
+            broker_positions.extend(holdings_data)
         except Exception as e:
-            print(f"   ⚠️ Failed to get holdings: {e}")
+            error_msg = str(e)
+            # Check if it's a rate limit error (handle SmartAPI DataException)
+            if ("exceeding access rate" in error_msg.lower() or 
+                "rate" in error_msg.lower() or
+                "access denied" in error_msg.lower()):
+                sync_failed = True
+                print(f"   ⚠️ Rate limit detected for holdings: {error_msg}")
+                print(f"   ⏳ Waiting 30 seconds before retry...")
+                time.sleep(30)  # Wait longer for rate limit
+                try:
+                    # Rate limit again before retry
+                    self.rate_limiter.wait_if_needed()
+                    holdings_data = _fetch_holdings()
+                    if holdings_data:
+                        broker_positions.extend(holdings_data)
+                        sync_failed = False  # Retry succeeded
+                except Exception as retry_error:
+                    retry_msg = str(retry_error)
+                    if "exceeding access rate" in retry_msg.lower() or "rate" in retry_msg.lower():
+                        sync_failed = True
+                        print(f"   ⚠️ Still rate limited. Holdings fetch failed.")
+                    else:
+                        print(f"   ⚠️ Failed to get holdings after retry: {retry_error}")
+            else:
+                print(f"   ⚠️ Failed to get holdings: {e}")
+        
+        # If sync failed due to rate limiting, return None to signal failure
+        if sync_failed:
+            print(f"   ⚠️ Position sync failed due to rate limiting. Returning None to preserve existing positions.")
+            return None
         
         normalized = {}
         
