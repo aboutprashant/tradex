@@ -768,13 +768,19 @@ def main():
                     logger.log_check_cycle(check_count, symbol, signal, current_price, indicators, reasons, position)
                     
                     # --- ENTRY LOGIC ---
-                    if not position and signal in ["BUY", "STRONG_BUY"]:
-                        # Check if we can open more positions
-                        if len(positions) >= Config.MAX_POSITIONS:
+                    # Allow BUY signals for both new positions and adding to existing positions (pyramiding)
+                    if signal in ["BUY", "STRONG_BUY"]:
+                        # Check if we can open more positions (only for new positions)
+                        if not position and len(positions) >= Config.MAX_POSITIONS:
                             reason = f"Max positions ({Config.MAX_POSITIONS}) reached"
                             print(f"⚠️ {reason}. Skipping {symbol}")
                             logger.log_trade_decision(symbol, signal, "SKIPPED", reason, indicators)
                             continue
+                        
+                        # If position exists, we're adding to it (pyramiding)
+                        is_pyramiding = position is not None
+                        if is_pyramiding:
+                            print(f"📈 Adding to existing position: {symbol} ({position['quantity']} units @ ₹{position['buy_price']:.2f})")
                         
                         # 📰 SENTIMENT: Check for news/events (skip in TEST MODE)
                         if not Config.TEST_MODE:
@@ -835,37 +841,84 @@ def main():
                             continue
                         
                         # 📐 KELLY: Calculate optimal position size
-                        quantity = position_sizer.calculate_position_size(
-                            Config.CAPITAL, current_price, symbol, combined_confidence
-                        )
+                        # If pyramiding, calculate additional quantity to add
+                        if is_pyramiding:
+                            # Calculate total desired position size
+                            total_desired_quantity = position_sizer.calculate_position_size(
+                                Config.CAPITAL, current_price, symbol, combined_confidence
+                            )
+                            existing_quantity = position['quantity']
+                            quantity = max(1, total_desired_quantity - existing_quantity)  # Additional quantity to add
+                            if quantity <= 0:
+                                print(f"   ⚠️ Already at optimal position size, skipping addition")
+                                continue
+                        else:
+                            # New position - use full calculated quantity
+                            quantity = position_sizer.calculate_position_size(
+                                Config.CAPITAL, current_price, symbol, combined_confidence
+                            )
                         
                         if quantity > 0:
                             signal_emoji = "🔥🔥🔥" if signal == "STRONG_BUY" else "📈📈"
-                            print(f"\n{signal_emoji} EXECUTING BUY ORDER {signal_emoji}")
+                            action_text = "ADDING TO POSITION" if is_pyramiding else "EXECUTING BUY ORDER"
+                            print(f"\n{signal_emoji} {action_text} {signal_emoji}")
                             print(f"   Symbol: {symbol}")
-                            print(f"   Quantity: {quantity} units @ ₹{current_price:.2f}")
-                            print(f"   📐 Kelly Position: {(quantity * current_price / Config.CAPITAL * 100):.1f}% of capital")
+                            if is_pyramiding:
+                                print(f"   Adding: {quantity} units @ ₹{current_price:.2f}")
+                                print(f"   Current: {position['quantity']} units @ ₹{position['buy_price']:.2f}")
+                                # Calculate new average price
+                                total_cost = (position['quantity'] * position['buy_price']) + (quantity * current_price)
+                                new_total_quantity = position['quantity'] + quantity
+                                new_avg_price = total_cost / new_total_quantity
+                                print(f"   New Average: {new_total_quantity} units @ ₹{new_avg_price:.2f}")
+                            else:
+                                print(f"   Quantity: {quantity} units @ ₹{current_price:.2f}")
+                                print(f"   📐 Kelly Position: {(quantity * current_price / Config.CAPITAL * 100):.1f}% of capital")
                             print(f"   🧠 Confidence: {combined_confidence:.2f}")
                             
                             if broker.place_order(symbol, quantity, "BUY"):
                                 ist = pytz.timezone('Asia/Kolkata')
-                                positions[symbol] = {
-                                    'quantity': quantity,
-                                    'buy_price': current_price,
-                                    'highest_price': current_price,
-                                    'entry_time': datetime.now(ist).isoformat(),  # Store IST time
-                                    'signal_type': signal,
-                                    'confidence': combined_confidence,
-                                    'bot_entered': True,  # Mark as bot-entered
-                                    'current_price': current_price
-                                }
+                                
+                                if is_pyramiding:
+                                    # Update existing position (pyramiding)
+                                    total_cost = (position['quantity'] * position['buy_price']) + (quantity * current_price)
+                                    new_total_quantity = position['quantity'] + quantity
+                                    new_avg_price = total_cost / new_total_quantity
+                                    
+                                    position['quantity'] = new_total_quantity
+                                    position['buy_price'] = new_avg_price
+                                    # Keep the highest price (don't reset it)
+                                    if current_price > position.get('highest_price', current_price):
+                                        position['highest_price'] = current_price
+                                    position['current_price'] = current_price
+                                    # Update signal type if this is a stronger signal
+                                    if signal == "STRONG_BUY" or (signal == "BUY" and position.get('signal_type') != "STRONG_BUY"):
+                                        position['signal_type'] = signal
+                                    # Update confidence (use weighted average or max)
+                                    position['confidence'] = max(position.get('confidence', 0.5), combined_confidence)
+                                    
+                                    print(f"   ✅ Position updated: {new_total_quantity} units @ ₹{new_avg_price:.2f} (avg)")
+                                else:
+                                    # Create new position
+                                    positions[symbol] = {
+                                        'quantity': quantity,
+                                        'buy_price': current_price,
+                                        'highest_price': current_price,
+                                        'entry_time': datetime.now(ist).isoformat(),  # Store IST time
+                                        'signal_type': signal,
+                                        'confidence': combined_confidence,
+                                        'bot_entered': True,  # Mark as bot-entered
+                                        'current_price': current_price
+                                    }
+                                
                                 trade_count += 1
                                 
                                 # Log and notify
-                                logger.log_trade(symbol, "BUY", quantity, current_price, 
+                                action_type = "ADD" if is_pyramiding else "BUY"
+                                logger.log_trade(symbol, action_type, quantity, current_price, 
                                                signal, "", 0, indicators)
                                 logger.log_trade_decision(symbol, signal, "EXECUTED", 
-                                                         f"BUY {quantity} units @ ₹{current_price:.2f}", 
+                                                         f"{action_type} {quantity} units @ ₹{current_price:.2f}", 
                                                          indicators, combined_confidence)
                                 logger.save_positions([{**pos, 'symbol': sym} for sym, pos in positions.items()])
                                 notifier.send_buy_alert(symbol, quantity, current_price, signal, indicators)

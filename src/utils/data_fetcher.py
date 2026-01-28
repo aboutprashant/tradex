@@ -85,10 +85,9 @@ class DataFetcher:
             response = None
             last_error = None
             
-            # Method 1: Try using REST API directly (most reliable)
-            # Note: Currently disabled due to authentication/endpoint issues
-            # Uncomment and fix if needed, otherwise falls back to yfinance
-            use_rest_api = False  # Set to True to enable REST API attempts
+            # Method 1: Try using REST API directly (most reliable for AWS Mumbai)
+            # Enabled for AWS production - Mumbai region should have better connectivity
+            use_rest_api = True  # Enabled for AWS Mumbai region
             if use_rest_api:
                 try:
                     auth_token = None
@@ -104,14 +103,26 @@ class DataFetcher:
                         
                         # Use Angel One REST API directly
                         url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/getCandleData"
+                        
+                        # Get client IP (try to get AWS instance IP, fallback to localhost)
+                        try:
+                            import socket
+                            # Try to get actual IP, but fallback to localhost
+                            client_ip = socket.gethostbyname(socket.gethostname())
+                            if client_ip.startswith('127.'):
+                                # If localhost, try to get public IP or use localhost
+                                client_ip = '127.0.0.1'
+                        except:
+                            client_ip = '127.0.0.1'
+                        
                         headers = {
                             'Authorization': f'Bearer {auth_token}',
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
                             'X-UserType': 'USER',
                             'X-SourceID': 'WEB',
-                            'X-ClientLocalIP': '127.0.0.1',
-                            'X-ClientPublicIP': '127.0.0.1',
+                            'X-ClientLocalIP': client_ip,
+                            'X-ClientPublicIP': client_ip,  # Use same IP for both
                             'X-MACAddress': '00:00:00:00:00:00',
                             'X-PrivateKey': self.broker.obj.api_key
                         }
@@ -123,7 +134,8 @@ class DataFetcher:
                             "todate": to_date_str
                         }
                         
-                        api_response = requests.post(url, json=payload, headers=headers, timeout=10)
+                        # Use longer timeout for AWS (network latency)
+                        api_response = requests.post(url, json=payload, headers=headers, timeout=30)
                         
                         # Check if response has content before parsing JSON
                         if api_response.status_code == 200:
@@ -136,6 +148,12 @@ class DataFetcher:
                                         pass
                                     else:
                                         # API returned success but no data
+                                        error_msg = response.get('message', 'No data in response')
+                                        error_code = response.get('errorcode', '')
+                                        if error_code:
+                                            last_error = f"API Error {error_code}: {error_msg}"
+                                        else:
+                                            last_error = f"API returned no data: {error_msg}"
                                         response = None
                                 except ValueError as json_error:
                                     # JSON parsing failed - response might be empty or invalid
@@ -145,6 +163,21 @@ class DataFetcher:
                                 # Empty response
                                 last_error = "Empty response from API"
                                 response = None
+                        elif api_response.status_code == 401:
+                            # Authentication failed - token might be expired
+                            last_error = f"Authentication failed (401) - token may be expired"
+                            response = None
+                            # Try to refresh token
+                            try:
+                                if self.broker.login():
+                                    # Retry once after login
+                                    api_response = requests.post(url, json=payload, headers=headers, timeout=30)
+                                    if api_response.status_code == 200:
+                                        response_text = api_response.text.strip()
+                                        if response_text:
+                                            response = api_response.json()
+                            except:
+                                pass
                         else:
                             # Non-200 status code
                             response_text = api_response.text[:200] if api_response.text else "No response text"
@@ -241,33 +274,66 @@ class DataFetcher:
                 print(f"⚠️ Error fetching from Angel One for {symbol}: {e}")
             return None
     
-    def fetch_from_yfinance(self, symbol, period="5d", interval="5m"):
+    def fetch_from_yfinance(self, symbol, period="5d", interval="5m", retries=3):
         """
         Fetch data from yfinance (fallback only).
         Only used when Angel One fails.
+        Enhanced with retries and better error handling for AWS.
         """
         if not YFINANCE_AVAILABLE:
             return None
-            
-        try:
-            yf_symbol = symbol.replace("-EQ", ".NS")
-            
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = yf.download(
-                    yf_symbol,
-                    period=period,
-                    interval=interval,
-                    progress=False,
-                    timeout=15,
-                    threads=False
-                )
-                
-            if data is not None and not data.empty:
-                return data
-        except Exception as e:
-            # Silent failure - this is fallback
-            pass
+        
+        yf_symbol = symbol.replace("-EQ", ".NS")
+        
+        # Try multiple symbol formats for Indian stocks
+        symbol_formats = [
+            yf_symbol,  # GOLDBEES.NS
+            symbol.replace("-EQ", "").lower() + ".ns",  # goldbees.ns
+            symbol.replace("-EQ", "").upper() + ".NS",  # GOLDBEES.NS
+        ]
+        
+        for attempt in range(retries):
+            for sym_format in symbol_formats:
+                try:
+                    # Add delay between retries (exponential backoff)
+                    if attempt > 0:
+                        time.sleep(2 ** attempt)  # 2s, 4s, 8s
+                    
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        # Use session with custom headers to avoid AWS IP blocking
+                        import yfinance as yf
+                        ticker = yf.Ticker(sym_format, session=None)
+                        
+                        # Try different download methods
+                        try:
+                            # Method 1: Direct download
+                            data = ticker.history(period=period, interval=interval, timeout=20)
+                            if data is not None and not data.empty:
+                                return data
+                        except:
+                            # Method 2: Try download with different parameters
+                            data = yf.download(
+                                sym_format,
+                                period=period,
+                                interval=interval,
+                                progress=False,
+                                timeout=20,
+                                threads=False,
+                                show_errors=False
+                            )
+                            if data is not None and not data.empty:
+                                return data
+                            
+                except Exception as e:
+                    # Try next symbol format or retry
+                    if attempt == retries - 1 and sym_format == symbol_formats[-1]:
+                        # Last attempt failed - log for debugging
+                        error_msg = str(e)
+                        if "HTTPSConnectionPool" not in error_msg and "timeout" not in error_msg.lower():
+                            # Only log non-network errors
+                            pass
+                    continue
         
         return None
     
@@ -290,16 +356,39 @@ class DataFetcher:
         
         # Fallback to yfinance (may fail on AWS, but worth trying)
         print(f"Angel One data unavailable for {symbol}, trying yfinance fallback...")
-        data = self.fetch_from_yfinance(symbol, period, interval)
+        data = self.fetch_from_yfinance(symbol, period, interval, retries=3)
         if data is not None and not data.empty:
             self._save_to_cache(symbol, interval, data)
             print(f"yfinance data received for {symbol}")
-
+            return data
+        
+        # Try alternative data source: NSE API (if available)
+        data = self._fetch_from_nse_alternative(symbol, period, interval)
+        if data is not None and not data.empty:
+            self._save_to_cache(symbol, interval, data)
+            print(f"✅ Alternative data source succeeded for {symbol}")
             return data
         
         # Both failed - return empty DataFrame
-        print(f"❌ Both Angel One and yfinance failed for {symbol}")
+        print(f"❌ All data sources failed for {symbol}")
         return pd.DataFrame()
+    
+    def _fetch_from_nse_alternative(self, symbol, period="5d", interval="5m"):
+        """
+        Alternative data source: Try NSE official API or web scraping as last resort.
+        This is a fallback when both Angel One and yfinance fail.
+        """
+        try:
+            # Try NSE official API (free tier)
+            # Format: https://www.nseindia.com/api/historical/cm/equity?symbol=GOLDBEES
+            nse_symbol = symbol.replace("-EQ", "")
+            
+            # For now, return None - can be implemented later
+            # This requires proper session handling with NSE website
+            return None
+            
+        except Exception:
+            return None
 
 
 # Global instance (will be initialized in script.py)

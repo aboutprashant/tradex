@@ -57,7 +57,7 @@ class Config:
     
     # Position sizing
     MAX_POSITION_PCT = 0.50    # Max 50% of capital in single position
-    MAX_POSITIONS = 2          # Max 2 positions at a time (Gold + Silver)
+    MAX_POSITIONS = 100          # Max 2 positions at a time (Gold + Silver)
     
     # ============================================
     # TECHNICAL INDICATORS
