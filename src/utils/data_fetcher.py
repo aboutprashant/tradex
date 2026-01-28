@@ -116,7 +116,7 @@ class DataFetcher:
                             auth_token = auth_token[7:]
                         
                         # Use Angel One REST API directly
-                        url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/getCandleData"
+                        url = "https://apiconnect.angelone.in/rest/secure/angelbroking/market/v1/getCandleData"
                         
                         # Get client IP (try to get AWS instance IP, fallback to localhost)
                         try:
