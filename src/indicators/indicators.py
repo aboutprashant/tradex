@@ -105,8 +105,23 @@ class MultiTimeframeAnalyzer:
         Returns: 'BULLISH', 'BEARISH', or 'NEUTRAL'
         """
         try:
-            df = yf.download(self.symbol, period="60d", interval="1d", progress=False)
-            if df.empty or len(df) < 20:
+            # Retry logic for yfinance API calls
+            df = None
+            for attempt in range(3):
+                try:
+                    df = yf.download(self.symbol, period="60d", interval="1d", progress=False, timeout=10, show_errors=False)
+                    if df is not None and not df.empty:
+                        break
+                except Exception as e:
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 * (attempt + 1))  # Exponential backoff
+                        continue
+                    else:
+                        print(f"⚠️ Error fetching daily trend for {self.symbol}: {e}")
+                        return "NEUTRAL", {}
+            
+            if df is None or df.empty or len(df) < 20:
                 return "NEUTRAL", {}
             
             df = apply_all_indicators(df)
@@ -147,8 +162,23 @@ class MultiTimeframeAnalyzer:
         Returns: 'BULLISH', 'BEARISH', or 'NEUTRAL'
         """
         try:
-            df = yf.download(self.symbol, period="5d", interval="1h", progress=False)
-            if df.empty or len(df) < 20:
+            # Retry logic for yfinance API calls
+            df = None
+            for attempt in range(3):
+                try:
+                    df = yf.download(self.symbol, period="5d", interval="1h", progress=False, timeout=10, show_errors=False)
+                    if df is not None and not df.empty:
+                        break
+                except Exception as e:
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 * (attempt + 1))  # Exponential backoff
+                        continue
+                    else:
+                        print(f"⚠️ Error fetching hourly trend for {self.symbol}: {e}")
+                        return "NEUTRAL", {}
+            
+            if df is None or df.empty or len(df) < 20:
                 return "NEUTRAL", {}
             
             df = apply_all_indicators(df)

@@ -52,9 +52,23 @@ class SymbolManager:
         """
         try:
             yf_symbol = self.get_yf_symbol(symbol)
-            df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False)
+            # Retry logic for yfinance API calls
+            df = None
+            for attempt in range(3):
+                try:
+                    df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False, timeout=10, show_errors=False)
+                    if df is not None and not df.empty:
+                        break
+                except Exception as e:
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 * (attempt + 1))  # Exponential backoff
+                        continue
+                    else:
+                        print(f"⚠️ Error fetching momentum for {symbol}: {e}")
+                        return 0
             
-            if df.empty or len(df) < 10:
+            if df is None or df.empty or len(df) < 10:
                 return 0
             
             # Handle multi-index

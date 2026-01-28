@@ -107,9 +107,23 @@ class SupportResistance:
         """
         try:
             yf_symbol = self.get_yf_symbol(symbol)
-            df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False)
+            # Retry logic for yfinance API calls
+            df = None
+            for attempt in range(3):
+                try:
+                    df = yf.download(yf_symbol, period=f"{days}d", interval="1d", progress=False, timeout=10, show_errors=False)
+                    if df is not None and not df.empty:
+                        break
+                except Exception as e:
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 * (attempt + 1))  # Exponential backoff
+                        continue
+                    else:
+                        print(f"⚠️ Error fetching support/resistance for {symbol}: {e}")
+                        return None
             
-            if df.empty:
+            if df is None or df.empty:
                 return None
             
             if isinstance(df.columns, pd.MultiIndex):

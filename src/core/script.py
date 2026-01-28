@@ -73,11 +73,81 @@ def is_high_liquidity_window():
     return False, "Low liquidity period"
 
 
-def fetch_live_data(symbol):
-    """Fetches the last 5 days of 5-minute data."""
+def fetch_live_data(symbol, max_retries=3, retry_delay=2):
+    """Fetches the last 5 days of 5-minute data with retry logic."""
     yf_symbol = symbol.replace("-EQ", ".NS")
-    data = yf.download(yf_symbol, period="5d", interval="5m", progress=False)
-    return data
+    
+    for attempt in range(max_retries):
+        try:
+            # Try downloading with timeout
+            data = yf.download(
+                yf_symbol, 
+                period="5d", 
+                interval="5m", 
+                progress=False,
+                timeout=10,
+                show_errors=False
+            )
+            
+            # Check if data is empty or invalid
+            if data is None or data.empty:
+                if attempt < max_retries - 1:
+                    print(f"⚠️ Empty data for {symbol}, retrying ({attempt + 1}/{max_retries})...")
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                else:
+                    print(f"❌ No data available for {symbol} after {max_retries} attempts")
+                    return pd.DataFrame()  # Return empty DataFrame
+            
+            # Success - return data
+            return data
+            
+        except Exception as e:
+            error_msg = str(e)
+            # Check for specific error types
+            if "JSONDecodeError" in error_msg or "Expecting value" in error_msg:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (attempt + 1)
+                    print(f"⚠️ yfinance API error for {symbol} (attempt {attempt + 1}/{max_retries}): {error_msg[:50]}...")
+                    print(f"   Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f"❌ Failed to fetch {symbol} after {max_retries} attempts: {error_msg[:100]}")
+                    # Try alternative symbol format as fallback
+                    return _try_alternative_symbol_format(symbol)
+            else:
+                # Other errors - log and return empty
+                print(f"❌ Error fetching {symbol}: {error_msg[:100]}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                return pd.DataFrame()
+    
+    # If we get here, all retries failed
+    return pd.DataFrame()
+
+
+def _try_alternative_symbol_format(symbol):
+    """Try alternative symbol formats as fallback."""
+    alternatives = [
+        symbol.replace("-EQ", ".NS"),  # Standard format
+        symbol.replace("-EQ", ""),  # Without suffix
+        symbol.replace("-EQ", "-EQ.NS"),  # With both
+    ]
+    
+    for alt_symbol in alternatives:
+        try:
+            print(f"   🔄 Trying alternative format: {alt_symbol}")
+            data = yf.download(alt_symbol, period="5d", interval="5m", progress=False, timeout=10, show_errors=False)
+            if data is not None and not data.empty:
+                print(f"   ✅ Success with alternative format: {alt_symbol}")
+                return data
+        except Exception:
+            continue
+    
+    print(f"   ❌ All alternative formats failed for {symbol}")
+    return pd.DataFrame()
 
 
 # ============================================
